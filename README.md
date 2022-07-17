@@ -27,6 +27,40 @@ internal APIs may be changed without warning.
 
 Questions and discussions are welcome on the [RocksDB Developers Public](https://www.facebook.com/groups/rocksdb.dev/) Facebook group and [email list](https://groups.google.com/g/rocksdb) on Google Groups.
 
+## Complile and run
+1. compile rocksdb
+
+```
+sudo DEBUG_LEVEL=0 ROCKSDB_PLUGINS=zenfs make -j48 db_bench install
+# must install
+# do not use cmake, it is too old. build by make.
+```
+2. compile zenfs util
+
+```
+cd plugin/zenfs/util
+make
+```
+
+3. dbbench prepare
+```
+sudo su
+echo deadline > /sys/class/block/nvme0n1/queue/scheduler
+# mkdir /home/lby/zfsfile/
+/home/lby/rocksdb/plugin/zenfs/util/zenfs mkfs --zbd=nvme0n1 --aux_path=/home/lby/zfsfile/ --force
+```
+4. run dbbench
+```
+/home/lby/rocksdb/db_bench --fs_uri=zenfs://dev:nvme0n1 --benchmarks="fillrandom,stats" \
+--use_direct_reads --key_size=16 --value_size=800 \
+       --target_file_size_base=2147483648 \
+       --use_direct_io_for_flush_and_compaction \
+       --max_bytes_for_level_multiplier=4 --write_buffer_size=2147483648 \
+       --target_file_size_multiplier=1 --num=10000000 --threads=2 \
+       --max_background_jobs=4 \
+       -compression_type=None --statistics >> dblog
+```
+
 ## License
 
 RocksDB is dual-licensed under both the GPLv2 (found in the COPYING file in the root directory) and Apache 2.0 License (found in the LICENSE.Apache file in the root directory).  You may select, at your option, one of the above-listed licenses.
