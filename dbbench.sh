@@ -1,0 +1,16 @@
+./db_bench \
+--fs_uri=zenfs://dev:nvme0n1 \
+--benchmarks="fillseq,fillrandom,stats,sstables,levelstats" \
+--num=1000000000 \
+--value_size=1024 \
+--key_size=16 \
+--min_write_buffer_number_to_merge=2 \
+--max_write_buffer_number=6 \
+--write_buffer_size=67108864 \
+--target_file_size_base=67108864 \
+--max_background_compactions=32 \
+--max_background_flushes=4 \
+--max_bytes_for_level_multiplier=5 \
+--stats_dump_period_sec=60 \
+--use_direct_io_for_flush_and_compaction \
+--compression_type=none > benchmarkslog/test.log 

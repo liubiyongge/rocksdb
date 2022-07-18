@@ -217,6 +217,8 @@ LIB_SOURCES =                                                   \
   trace_replay/block_cache_tracer.cc                            \
   trace_replay/io_tracer.cc                                     \
   util/async_file_reader.cc					\
+  util/zipf.cc                                                  \
+  util/latest-generator.cc                                      \
   util/build_version.cc                                         \
   util/cleanable.cc                                             \
   util/coding.cc                                                \
