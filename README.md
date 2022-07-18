@@ -60,6 +60,9 @@ echo deadline > /sys/class/block/nvme0n1/queue/scheduler
        --max_background_jobs=4 \
        -compression_type=None --statistics >> dblog
 ```
+### config file
+- include/rocksdb/macros.h
+- plugin/zenfs/fs/macros.h
 
 ## License
 
