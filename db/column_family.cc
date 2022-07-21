@@ -40,6 +40,7 @@
 #include "util/autovector.h"
 #include "util/cast_util.h"
 #include "util/compression.h"
+#include "rocksdb/macros.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -1461,7 +1462,42 @@ Env::WriteLifeTimeHint ColumnFamilyData::CalculateSSTWriteHint(int level) {
     return Env::WLTH_MEDIUM;
   }
   int base_level = current_->storage_info()->base_level();
+#ifdef znskv_lifetime
+    if(level==1){
+      return static_cast<Env::WriteLifeTimeHint>(3);
+    }else if(level==2){
+      return static_cast<Env::WriteLifeTimeHint>(5);
+    }else if(level==3){
+      return static_cast<Env::WriteLifeTimeHint>(12);
+    }else if(level==4){
+      return static_cast<Env::WriteLifeTimeHint>(18);
+    }else if(level==5){
+      return static_cast<Env::WriteLifeTimeHint>(21);
+    }else if(level==6){
+      return static_cast<Env::WriteLifeTimeHint>(23);
+    }else if(level==7){
+      return static_cast<Env::WriteLifeTimeHint>(24);
+    }
 
+    return static_cast<Env::WriteLifeTimeHint>(level - base_level +
+                              static_cast<int>(Env::WLTH_LONG));
+  #elif (defined multistream)
+    if(level==1){
+      return static_cast<Env::WriteLifeTimeHint>(4);
+    }else if(level==2){
+      return static_cast<Env::WriteLifeTimeHint>(5);
+    }else if(level==3){
+      return static_cast<Env::WriteLifeTimeHint>(6);
+    }else if(level==4){
+      return static_cast<Env::WriteLifeTimeHint>(7);
+    }else if(level==5){
+      return static_cast<Env::WriteLifeTimeHint>(8);
+    }else if(level==6){
+      return static_cast<Env::WriteLifeTimeHint>(9);
+    }else if(level==7){
+      return static_cast<Env::WriteLifeTimeHint>(10);
+    }
+  #else  
   // L1: medium, L2: long, ...
   if (level - base_level >= 2) {
     return Env::WLTH_EXTREME;
@@ -1472,6 +1508,7 @@ Env::WriteLifeTimeHint ColumnFamilyData::CalculateSSTWriteHint(int level) {
   }
   return static_cast<Env::WriteLifeTimeHint>(level - base_level +
                             static_cast<int>(Env::WLTH_MEDIUM));
+#endif
 }
 
 Status ColumnFamilyData::AddDirectories(

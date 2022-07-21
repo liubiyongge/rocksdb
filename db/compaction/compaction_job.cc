@@ -53,6 +53,9 @@
 #include "table/unique_id_impl.h"
 #include "test_util/sync_point.h"
 #include "util/stop_watch.h"
+#include "rocksdb/zonestate.h"
+#include "rocksdb/macros.h"
+unordered_map<int,int> sst_lifetime;
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -1229,6 +1232,84 @@ Status CompactionJob::FinishCompactionOutputFile(
   // Check for iterator errors
   Status s = input_status;
 
+  #if (defined znskv_lifetime_pri)
+  int mylevel=sub_compact->compaction->output_level();
+  //if(mylevel>1&&cfd->current()->storage_info()->CompactionScore(mylevel+1)>0.8){
+  std::string smallest=meta->smallest.user_key().ToString(1).substr(0,16);
+  std::string largest=meta->largest.user_key().ToString(1).substr(0,16);
+
+    //long int meta_overlapping_bytes = meta->fd.file_size;
+    long int meta_overlapping_bytes = 0;
+    uint64_t overlapping_filenums = 0;    
+
+    auto nextlevelfiles=cfd->current()->storage_info()->LevelFiles(mylevel+1);
+    auto next_level_it=nextlevelfiles.begin();
+    int pri=1;
+    if(mylevel<6){
+
+              // Skip files in next level that is smaller than current file
+      while (next_level_it != nextlevelfiles.end() &&
+          cfd->user_comparator()->Compare((*next_level_it)->largest.user_key(), meta->smallest.user_key()) < 0) {
+          next_level_it++;
+      }
+
+      while (next_level_it != nextlevelfiles.end() &&
+          cfd->user_comparator()->Compare((*next_level_it)->smallest.user_key(), meta->largest.user_key()) < 0) {
+          meta_overlapping_bytes += (*next_level_it)->fd.file_size;
+          overlapping_filenums++;
+
+          if (cfd->user_comparator()->Compare((*next_level_it)->largest.user_key(), meta->largest.user_key())> 0) {
+              // next level file cross large boundary of current file.
+              break;
+              }
+            next_level_it++;
+          }
+    }
+    auto thislevelfiles=cfd->current()->storage_info()->LevelFiles(mylevel);
+    next_level_it=nextlevelfiles.begin();
+    for (auto& file : thislevelfiles) {
+
+    long int file_overlapping_bytes = file->fd.file_size;
+    //long int overlapping_bytes = zone_zoneunusepersent[sst_zone[(file->fd.GetNumber())]];
+    // Skip files in next level that is smaller than current file
+    while (next_level_it != nextlevelfiles.end() &&
+           cfd->user_comparator()->Compare((*next_level_it)->largest.user_key(), file->smallest.user_key()) < 0) {
+      next_level_it++;
+    }
+
+    while (next_level_it != nextlevelfiles.end() &&
+           cfd->user_comparator()->Compare((*next_level_it)->smallest.user_key(), file->largest.user_key()) < 0) {
+      file_overlapping_bytes += (*next_level_it)->fd.file_size;
+      if (cfd->user_comparator()->Compare((*next_level_it)->largest.user_key(), file->largest.user_key()) > 0) {
+        // next level file cross large boundary of current file.
+        break;
+      }
+      next_level_it++;
+    }
+    if(file_overlapping_bytes<=meta_overlapping_bytes){
+      pri++;
+    }
+    assert(file->compensated_file_size != 0);
+
+  }
+  // double myscore=0;
+  int lifetime=mylevel+3;
+      // if(overlapping_filenums!=0&&mylevel>1&&pri<15){
+      //   lifetime--;
+      // }
+      // if(overlapping_filenums==0&&mylevel>=2){
+      //   lifetime++;
+      // }
+      // //add by wdh
+      // {FILE *fp = NULL;	
+      // fp = fopen("/tmp/zonesstbirth.txt", "a+");
+      // time_t now = time(0);
+      // fprintf(fp,"%ld %d %d %lf %d %ld\n",meta->fd.packed_number_and_path_id,mylevel,pri,myscore,lifetime,now);
+      // fclose(fp);}
+
+    sst_lifetime[meta->fd.packed_number_and_path_id]=lifetime;
+    //}
+#endif
   // Add range tombstones
   auto earliest_snapshot = kMaxSequenceNumber;
   if (existing_snapshots_.size() > 0) {
@@ -1748,9 +1829,21 @@ void CompactionJob::LogCompaction() {
     for (size_t i = 0; i < compaction->num_input_levels(); ++i) {
       stream << ("files_L" + std::to_string(compaction->level(i)));
       stream.StartArray();
+      #ifdef znskv_log
+      FILE *fp = NULL;	
+      fp = fopen(LOGFILE, "a+");
+      fprintf(fp,"compaction level%d: ",compaction->level(i));        
+      for (auto f : *compaction->inputs(i)) {
+        stream << f->fd.GetNumber();
+        fprintf(fp,"%lu\t",f->fd.GetNumber());      
+      }
+      fprintf(fp,"\n");
+      fclose(fp);
+      #else
       for (auto f : *compaction->inputs(i)) {
         stream << f->fd.GetNumber();
       }
+      #endif
       stream.EndArray();
     }
     stream << "score" << compaction->score() << "input_data_size"

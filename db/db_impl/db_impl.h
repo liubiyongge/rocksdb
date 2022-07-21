@@ -66,7 +66,7 @@
 #include "util/repeatable_thread.h"
 #include "util/stop_watch.h"
 #include "util/thread_local.h"
-
+#include "rocksdb/macros.h"
 namespace ROCKSDB_NAMESPACE {
 
 class Arena;
@@ -1242,7 +1242,9 @@ class DBImpl : public DB {
   static std::string GenerateDbSessionId(Env* env);
 
   bool seq_per_batch() const { return seq_per_batch_; }
-
+  #ifdef TerarkDB
+  void ScheduleZNSGC();
+  #endif
  protected:
   const std::string dbname_;
   // TODO(peterd): unify with VersionSet::db_id_

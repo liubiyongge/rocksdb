@@ -7,7 +7,7 @@
 
 #include "db/db_impl/db_impl.h"
 #include "rocksdb/system_clock.h"
-
+#include "rocksdb/macros.h"
 #ifndef ROCKSDB_LITE
 namespace ROCKSDB_NAMESPACE {
 
@@ -50,6 +50,16 @@ Status PeriodicWorkScheduler::Register(DBImpl* dbi,
   if (!succeeded) {
     return Status::Aborted("Unable to add periodic task PersistStats");
   }
+  #ifdef TerarkDB  
+  bool succeeded =   timer->Add([dbi]() { dbi->ScheduleZNSGC(); },
+             GetTaskName(dbi, "schedule_gc_zns"),
+             initial_delay.fetch_add(1) % kDefaultScheduleZNSTTLPeriodSec *
+                 100000,
+             kDefaultScheduleZNSTTLPeriodSec * 100000);
+    if (!succeeded) {
+    return Status::Aborted("Unable to add periodic task ScheduleZNSGC");
+  }
+  #endif 
   return Status::OK();
 }
 

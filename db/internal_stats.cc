@@ -29,7 +29,12 @@
 #include "table/block_based/cachable_entry.h"
 #include "util/hash_containers.h"
 #include "util/string_util.h"
+#include "plugin/zenfs/fs/zbd_zenfs.h"
+#include "plugin/zenfs/fs/fs_zenfs.h"
+#include "rocksdb/zonestate.h"
 
+double intwrspeed=0;
+double sumwrspeed=0;
 namespace ROCKSDB_NAMESPACE {
 
 #ifndef ROCKSDB_LITE
@@ -208,6 +213,8 @@ void PrintLevelStats(char* buf, size_t len, const std::string& name,
       stat_value.at(LevelStatType::W_BLOB_GB));
 }
 
+
+
 void PrintLevelStats(char* buf, size_t len, const std::string& name,
                      int num_files, int being_compacted, double total_file_size,
                      double score, double w_amp,
@@ -216,6 +223,42 @@ void PrintLevelStats(char* buf, size_t len, const std::string& name,
   PrepareLevelStats(&level_stats, num_files, being_compacted, total_file_size,
                     score, w_amp, stats);
   PrintLevelStats(buf, len, name, level_stats);
+}
+
+  //add by wdh
+  //打印ZNS SSD容量信息
+  void PrintZbdStat(char* buf, size_t len, const double free,
+                     const double used, const double reclaimable,
+                     const double sumamp, const double intamp,
+                     const double sumwrspeed, const double intwrspeed,
+                     const double wal_bytes, const double writesst,
+                     const uint64_t migrate_byte) {
+    snprintf(
+        buf, len,
+        "%7s "
+        "%.2f "        //ZNS SSD空闲空间
+        "%.2f "        //ZNS SSD已用空间
+        "%.2f "        //ZNS SSD无效空间
+        "%.2f "       //ZNS SSD空间放大
+        "%.2f "       //总写放大
+        "%.2f "       //Int写放大   
+        "%.2f "        //总写带宽
+        "%.2f "        //Int写带宽
+        "%.2f "         //WAL写入量
+        "%.2f "      //SST写入量
+        "%.2f\n",    //  迁移数据量MB
+        "ZNS SSD",
+        free,
+        used,
+        reclaimable,
+        (float)reclaimable/used,
+        sumamp,
+        intamp,
+        sumwrspeed,
+        intwrspeed,
+        wal_bytes,
+        writesst,
+        migrate_byte/kGB);
 }
 
 // Assumes that trailing numbers represent an optional argument. This requires
@@ -1442,6 +1485,7 @@ void InternalStats::DumpDBStats(std::string* value) {
   // writes/groups is the average group commit size.
   //
   // The format is the same for interval stats.
+  sumwrspeed = user_bytes_written / kMB / seconds_up;
   snprintf(buf, sizeof(buf),
            "Cumulative writes: %s writes, %s keys, %s commit groups, "
            "%.1f writes per commit group, ingest: %.2f GB, %.2f MB/s\n",
@@ -1475,6 +1519,8 @@ void InternalStats::DumpDBStats(std::string* value) {
   uint64_t interval_write_self = write_self - db_stats_snapshot_.write_self;
   uint64_t interval_num_keys_written =
       num_keys_written - db_stats_snapshot_.num_keys_written;
+  intwrspeed = (user_bytes_written - db_stats_snapshot_.ingest_bytes) / kMB /
+          std::max(interval_seconds_up, 0.001);
   snprintf(
       buf, sizeof(buf),
       "Interval writes: %s writes, %s keys, %s commit groups, "
@@ -1730,6 +1776,18 @@ void InternalStats::DumpCFStatsNoFileHistogram(std::string* value) {
       static_cast<double>(interval_ingest);
   PrintLevelStats(buf, sizeof(buf), "Int", 0, 0, 0, 0, w_amp, interval_stats);
   value->append(buf);
+
+  FileSystem* fs=cfd_->current()->version_set()->getFileSystem();
+  auto zen_fs = dynamic_cast<ZenFS*>(fs);
+  auto zbd_=zen_fs->getZonedBlockDevice();
+  double ZenFS_Free_Space_Size=zbd_->GetFreeSpace()/kGB;
+  double ZenFS_Used_Space_Size=zbd_->GetUsedSpace()/kGB;
+  double ZenFS_Reclaimable_Space_Size=zbd_->GetReclaimableSpace()/kGB;
+  double wal_bytes = GetDBStats(InternalStats::kIntStatsWalFileBytes)/kGB;
+  double writesst = levels_stats[-1].at(LevelStatType::WRITE_GB);
+  double sumamp = levels_stats[-1].at(LevelStatType::WRITE_AMP);
+  PrintZbdStat(buf, sizeof(buf), ZenFS_Free_Space_Size, ZenFS_Used_Space_Size, ZenFS_Reclaimable_Space_Size, sumamp, w_amp, sumwrspeed, intwrspeed, wal_bytes, writesst, zen_fs->migrate_byte);  
+  value->append(buf);  
 
   PrintLevelStatsHeader(buf, sizeof(buf), cfd_->GetName(), "Priority");
   value->append(buf);

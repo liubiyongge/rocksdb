@@ -77,6 +77,7 @@ enum class IOType : uint8_t {
   kLog,
   kUnknown,
   kInvalid,
+  kMigrate,
 };
 
 // Per-request options that can be passed down to the FileSystem

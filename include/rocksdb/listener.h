@@ -20,6 +20,7 @@
 #include "rocksdb/status.h"
 #include "rocksdb/table_properties.h"
 #include "rocksdb/types.h"
+#include "rocksdb/macros.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -142,6 +143,10 @@ enum class CompactionReason : int {
   kFlush,
   // Compaction caused by external sst file ingestion
   kExternalSstIngestion,
+  // DBImpl::ScheduleZNSGC() marked files for compaction
+  #ifdef TerarkDB
+  kFilesMarkedFromFileSystem,
+  #endif
   // Compaction due to SST file being too old
   kPeriodicCompaction,
   // Compaction in order to move files to temperature

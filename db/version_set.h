@@ -56,6 +56,7 @@
 #include "trace_replay/block_cache_tracer.h"
 #include "util/coro_utils.h"
 #include "util/hash_containers.h"
+#include "rocksdb/macros.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -163,6 +164,9 @@ class VersionStorageInfo {
   void ReserveBlob(size_t size) { blob_files_.reserve(size); }
 
   void AddBlobFile(std::shared_ptr<BlobFileMetaData> blob_file_meta);
+
+  void PrepareForVersionAppend(const ImmutableOptions& immutable_options,
+                               const MutableCFOptions& mutable_cf_options, FileSystem* fs_);
 
   void PrepareForVersionAppend(const ImmutableOptions& immutable_options,
                                const MutableCFOptions& mutable_cf_options);
@@ -578,8 +582,12 @@ class VersionStorageInfo {
   void UpdateNumNonEmptyLevels();
   void CalculateBaseBytes(const ImmutableOptions& ioptions,
                           const MutableCFOptions& options);
+
   void UpdateFilesByCompactionPri(const ImmutableOptions& immutable_options,
-                                  const MutableCFOptions& mutable_cf_options);
+                                  const MutableCFOptions& mutable_cf_options, FileSystem* fs_);
+  void UpdateFilesByCompactionPri(const ImmutableOptions& immutable_options,
+                                  const MutableCFOptions& mutable_cf_options);                    
+
 
   void GenerateFileIndexer() {
     file_indexer_.UpdateIndex(&arena_, num_non_empty_levels_, files_);

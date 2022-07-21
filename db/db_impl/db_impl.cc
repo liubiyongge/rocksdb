@@ -108,6 +108,13 @@
 #include "util/string_util.h"
 #include "utilities/trace/replayer_impl.h"
 
+#include "plugin/zenfs/fs/zbd_stat.h"
+#include "plugin/zenfs/fs/zbd_zenfs.h"
+#include "plugin/zenfs/fs/io_zenfs.h"
+#include "plugin/zenfs/fs/fs_zenfs.h"
+#include "rocksdb/zonestate.h"
+#include "rocksdb/macros.h"
+
 namespace ROCKSDB_NAMESPACE {
 
 const std::string kDefaultColumnFamilyName("default");
@@ -1063,6 +1070,75 @@ FSDirectory* DBImpl::GetDataDir(ColumnFamilyData* cfd, size_t path_id) const {
   }
   return ret_dir;
 }
+
+#ifdef TerarkDB
+void DBImpl::ScheduleZNSGC() {
+  LogBuffer log_buffer_info(InfoLogLevel::INFO_LEVEL,
+                            immutable_db_options_.info_log.get());
+  LogBuffer log_buffer_debug(InfoLogLevel::DEBUG_LEVEL,
+                             immutable_db_options_.info_log.get());
+
+  auto zen_fs = dynamic_cast<ZenFS*>(GetFileSystem());
+  BDZenFSStat zenfs_stat;
+  zen_fs->GetStat(zenfs_stat);
+
+  std::vector<BDZoneStat>& stat = zenfs_stat.zone_stats_;
+  // uint64_t diskfree=2100000000000;
+
+  // auto zbd_=zen_fs->getZonedBlockDevice();
+  // diskfree=zbd_->GetFreeSpace();
+
+  float GarbageRate_=0.7;
+  // if(diskfree<400000000000){
+  //   GarbageRate_=0.5;
+  // }
+  // else if(diskfree<600000000000){
+  //   GarbageRate_=0.6;
+  // }
+  // else if(diskfree<800000000000){
+  //   GarbageRate_=0.7;
+  // }
+  // else if(diskfree<1200000000000){
+  //   GarbageRate_=0.8;
+  // }
+  // else{
+  //   GarbageRate_=0.9;
+  // }
+
+  std::set<uint64_t> migrate_zone_ids;
+
+  size_t free = 0, used = 0, reclaim = 0, total = 0;
+  for (const auto& zone : stat) {
+    // Collect all zones with over 80% garbage
+    if (zone.GarbageRate() > GarbageRate_) {
+      migrate_zone_ids.emplace(zone.start_position);
+    }
+
+    free += zone.free_capacity;
+    used += zone.used_capacity;
+    total += zone.used_capacity + zone.reclaim_capacity;
+    if (zone.free_capacity == 0) {
+      reclaim += zone.reclaim_capacity;
+    }
+  }
+
+  // Migrate all proper extents larger than `min_szie`
+  uint32_t min_size = 128 << 10;
+  std::vector<ZoneExtentSnapshot*> migrate_exts;
+  for (auto& ext : zenfs_stat.snapshot_.extents_) {
+    if (migrate_zone_ids.find(ext.zone_start) != migrate_zone_ids.end() &&
+        ext.length > min_size) {
+      migrate_exts.push_back(&ext);
+    }
+  }
+  zen_fs->MigrateExtents(migrate_exts);
+  ROCKS_LOG_BUFFER(&log_buffer_info, "ZNS GC: Migrate Extent Count: %d",
+                   migrate_exts.size());
+
+  log_buffer_info.FlushBufferToLog();
+  log_buffer_debug.FlushBufferToLog();
+}
+#endif
 
 Status DBImpl::SetOptions(
     ColumnFamilyHandle* column_family,

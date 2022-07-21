@@ -9,6 +9,7 @@
 
 #include "db/db_impl/db_impl.h"
 #include "util/timer.h"
+#include "rocksdb/macros.h"
 
 namespace ROCKSDB_NAMESPACE {
 class SystemClock;
@@ -40,7 +41,9 @@ class PeriodicWorkScheduler {
   // log messages leading up to the hang will eventually become visible in the
   // log.
   static const uint64_t kDefaultFlushInfoLogPeriodSec = 10;
-
+#ifdef TerarkDB
+  static const long kDefaultScheduleZNSTTLPeriodSec = 1;
+#endif
  protected:
   std::unique_ptr<Timer> timer;
   // `timer_mu_` serves two purposes currently:

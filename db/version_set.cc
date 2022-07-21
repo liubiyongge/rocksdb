@@ -73,6 +73,10 @@
 #include "util/string_util.h"
 #include "util/user_comparator_wrapper.h"
 
+#include "plugin/zenfs/fs/zbd_zenfs.h"
+#include "plugin/zenfs/fs/fs_zenfs.h"
+#include "rocksdb/zonestate.h"
+
 // Generate the regular and coroutine versions of some methods by
 // including version_set_sync_and_async.h twice
 // Macros in the header will expand differently based on whether
@@ -2370,6 +2374,21 @@ void VersionStorageInfo::GenerateLevelFilesBrief() {
         &level_files_brief_[level], files_[level], &arena_);
   }
 }
+ 
+void VersionStorageInfo::PrepareForVersionAppend(
+    const ImmutableOptions& immutable_options,
+    const MutableCFOptions& mutable_cf_options, FileSystem* fs_) {
+
+  ComputeCompensatedSizes();
+  UpdateNumNonEmptyLevels();
+  CalculateBaseBytes(immutable_options, mutable_cf_options);
+  UpdateFilesByCompactionPri(immutable_options, mutable_cf_options, fs_);
+  GenerateFileIndexer();
+  GenerateLevelFilesBrief();
+  GenerateLevel0NonOverlapping();
+  GenerateBottommostFiles();
+  GenerateFileLocationIndex();
+}
 
 void VersionStorageInfo::PrepareForVersionAppend(
     const ImmutableOptions& immutable_options,
@@ -2394,8 +2413,11 @@ void Version::PrepareAppend(const MutableCFOptions& mutable_cf_options,
   if (update_stats) {
     UpdateAccumulatedStats();
   }
-
+#if (defined znskv_pri)||(defined znskv_log)||(defined znskv_migrate)||(defined autopri)  
+  storage_info_.PrepareForVersionAppend(*cfd_->ioptions(), mutable_cf_options, vset_->fs_.get());
+#else
   storage_info_.PrepareForVersionAppend(*cfd_->ioptions(), mutable_cf_options);
+#endif
 }
 
 bool Version::MaybeInitializeFileMetaData(FileMetaData* file_meta) {
@@ -3129,6 +3151,211 @@ void VersionStorageInfo::UpdateNumNonEmptyLevels() {
 
 namespace {
 // Sort `temp` based on ratio of overlapping size over file size
+#ifdef znskv_log
+void printfsstinzone(BDZenFSStat& stat){
+      FILE *fp = NULL;
+      fp = fopen(LOGFILE, "a+");
+      for (const auto& zone : stat.zone_stats_){
+        if(!zone.files.empty()){
+          fprintf(fp,"%ld %.2f lifetime%d:",zone.start_position/2147483648,(float)zone.reclaim_capacity/(zone.free_capacity+zone.used_capacity+zone.reclaim_capacity),zone.lifetime);
+        }
+        for (const auto& file : zone.files){
+          if(sst_lifetime.count(atoi(file.filename.substr(20,6).c_str()))>0){
+            fprintf(fp,"%s lifetime:%d\t",file.filename.substr(20,file.filename.length() - 20).c_str(),sst_lifetime[atoi(file.filename.substr(20,6).c_str())]);
+          }
+          else{
+            fprintf(fp,"%s lisetime:%lu\t",file.filename.substr(20,file.filename.length() - 20).c_str(),file.lifetime);
+          }
+
+        } 
+        if(!zone.files.empty())
+          fprintf(fp,"\n");
+      }
+      fprintf(fp,"\n");
+      fclose(fp);
+}
+#endif
+
+#ifdef znskv_pri
+float GetReclaimable(float znsfile_to_zoneunusepersent){
+  float Reclaimable=0;
+          if(znsfile_to_zoneunusepersent>0.9){
+            Reclaimable=10;
+          }else if(znsfile_to_zoneunusepersent>0.8){
+            Reclaimable=1;
+          }else if(znsfile_to_zoneunusepersent>0.7){
+            Reclaimable=0.4;
+          }else if(znsfile_to_zoneunusepersent>0.6){
+            Reclaimable=0.2;
+          }else {
+            Reclaimable=0;
+          }
+  return Reclaimable;
+}
+#elif (defined autopri)
+float GetReclaimable(float znsfile_to_zoneunusepersent,uint64_t zenfsfreespace){
+  float Reclaimable=0;
+      if(zenfsfreespace<500000000000){
+          if(znsfile_to_zoneunusepersent>0.9){
+            Reclaimable=10;
+          }else if(znsfile_to_zoneunusepersent>0.8){
+            Reclaimable=5;
+          }else if(znsfile_to_zoneunusepersent>0.7){
+            Reclaimable=3;
+          }else if(znsfile_to_zoneunusepersent>0.6){
+            Reclaimable=1;
+          }else {
+            Reclaimable=znsfile_to_zoneunusepersent;
+          }
+      }else if(zenfsfreespace<1000000000000){
+          if(znsfile_to_zoneunusepersent>0.9){
+            Reclaimable=5;
+          }else if(znsfile_to_zoneunusepersent>0.8){
+            Reclaimable=2;
+          }else if(znsfile_to_zoneunusepersent>0.7){
+            Reclaimable=1;
+          }else if(znsfile_to_zoneunusepersent>0.6){
+            Reclaimable=0.5;
+          }else {
+            Reclaimable=znsfile_to_zoneunusepersent;
+          }
+      }else if(zenfsfreespace<1200000000000){
+          if(znsfile_to_zoneunusepersent>0.9){
+            Reclaimable=3;
+          }else if(znsfile_to_zoneunusepersent>0.8){
+            Reclaimable=1.5;
+          }else if(znsfile_to_zoneunusepersent>0.7){
+            Reclaimable=0.8;
+          }else if(znsfile_to_zoneunusepersent>0.6){
+            Reclaimable=0.3;
+          }else {
+            Reclaimable=znsfile_to_zoneunusepersent/3;
+          }
+      }else if(zenfsfreespace<1500000000000){
+          if(znsfile_to_zoneunusepersent>0.9){
+            Reclaimable=2;
+          }else if(znsfile_to_zoneunusepersent>0.8){
+            Reclaimable=0.8;
+          }else if(znsfile_to_zoneunusepersent>0.7){
+            Reclaimable=0.3;
+          }else {
+            Reclaimable=znsfile_to_zoneunusepersent/3;
+          }
+      }else {
+          if(znsfile_to_zoneunusepersent>0.9){
+            Reclaimable=1;
+          }else if(znsfile_to_zoneunusepersent>0.8){
+            Reclaimable=0.5;
+          }else if(znsfile_to_zoneunusepersent>0.7){
+            Reclaimable=0.2;
+          }else {
+            Reclaimable=znsfile_to_zoneunusepersent/10;
+          }
+      }
+      return Reclaimable;
+}
+#endif
+#if (defined znskv_pri)
+void SortFileByOverlappingRatio(
+    const InternalKeyComparator& icmp, const std::vector<FileMetaData*>& files,
+    const std::vector<FileMetaData*>& next_level_files, SystemClock* clock,
+    int level, int num_non_empty_levels, uint64_t ttl,
+    std::vector<Fsize>* temp, std::unordered_map<uint64_t, float>& znsfile_to_zoneunusepersent) 
+#else 
+void SortFileByOverlappingRatio(
+    const InternalKeyComparator& icmp, const std::vector<FileMetaData*>& files,
+    const std::vector<FileMetaData*>& next_level_files, SystemClock* clock,
+    int level, int num_non_empty_levels, uint64_t ttl,
+    std::vector<Fsize>* temp) 
+#endif
+{
+  std::unordered_map<uint64_t, uint64_t> file_to_order;
+  auto next_level_it = next_level_files.begin();
+
+  int64_t curr_time;
+  Status status = clock->GetCurrentTime(&curr_time);
+  if (!status.ok()) {
+    // If we can't get time, disable TTL.
+    ttl = 0;
+  }
+
+  FileTtlBooster ttl_booster(static_cast<uint64_t>(curr_time), ttl,
+                             num_non_empty_levels, level);
+#if (define GearDB)
+    uint64_t overlapping_bytes = 0;
+  for (auto& file : files) {
+    overlapping_bytes += 1;
+    
+    file_to_order[file->fd.GetNumber()] =
+        overlapping_bytes;
+  }
+#else
+  for (auto& file : files) {
+    uint64_t overlapping_bytes = 0;
+#if (defined znskv_pri)
+    float Reclaimable=GetReclaimable(znsfile_to_zoneunusepersent[file->fd.GetNumber()]);
+    overlapping_bytes = file->fd.file_size - file->fd.file_size*Reclaimable;
+#endif
+    // Skip files in next level that is smaller than current file
+    while (next_level_it != next_level_files.end() &&
+           icmp.Compare((*next_level_it)->largest, file->smallest) < 0) {
+      next_level_it++;
+    }
+
+    while (next_level_it != next_level_files.end() &&
+           icmp.Compare((*next_level_it)->smallest, file->largest) < 0) {
+    #if (defined znskv_pri)
+      Reclaimable=GetReclaimable(znsfile_to_zoneunusepersent[(*next_level_it)->fd.GetNumber()]);
+      overlapping_bytes+= (*next_level_it)->fd.file_size-(*next_level_it)->fd.file_size*Reclaimable;
+    #else
+      overlapping_bytes += (*next_level_it)->fd.file_size;
+    #endif
+
+      if (icmp.Compare((*next_level_it)->largest, file->largest) > 0) {
+        // next level file cross large boundary of current file.
+        break;
+      }
+      next_level_it++;
+    }
+
+    uint64_t ttl_boost_score = (ttl > 0) ? ttl_booster.GetBoostScore(file) : 1;
+    assert(ttl_boost_score > 0);
+    assert(file->compensated_file_size != 0);
+    file_to_order[file->fd.GetNumber()] = overlapping_bytes * 1024U /
+                                          file->compensated_file_size /
+                                          ttl_boost_score;
+  }
+#endif
+  size_t num_to_sort = temp->size() > VersionStorageInfo::kNumberFilesToSort
+                           ? VersionStorageInfo::kNumberFilesToSort
+                           : temp->size();
+
+  std::partial_sort(temp->begin(), temp->begin() + num_to_sort, temp->end(),
+                    [&](const Fsize& f1, const Fsize& f2) -> bool {
+                      // If score is the same, pick file with smaller keys.
+                      // This makes the algorithm more deterministic, and also
+                      // help the trivial move case to have more files to
+                      // extend.
+                      if (file_to_order[f1.file->fd.GetNumber()] ==
+                          file_to_order[f2.file->fd.GetNumber()]) {
+                        return icmp.Compare(f1.file->smallest,
+                                            f2.file->smallest) < 0;
+                      }
+                      return file_to_order[f1.file->fd.GetNumber()] <
+                             file_to_order[f2.file->fd.GetNumber()];
+                    });
+#ifdef wdh_log
+  FILE *fp = NULL;	
+  fp = fopen(LOGFILE, "a+");
+  for(auto filetemp:*temp){
+    fprintf(fp,"%lu:%ld zns:%f\t",filetemp.file->fd.GetNumber(),file_to_order[filetemp.file->fd.GetNumber()],znsfile_to_zoneunusepersent[filetemp.file->fd.GetNumber()]);      
+  }
+  if(!temp->empty())
+    fprintf(fp,"\n");
+  fclose(fp);
+#endif
+}
+
 void SortFileByOverlappingRatio(
     const InternalKeyComparator& icmp, const std::vector<FileMetaData*>& files,
     const std::vector<FileMetaData*>& next_level_files, SystemClock* clock,
@@ -3248,6 +3475,138 @@ void SortFileByRoundRobin(const InternalKeyComparator& icmp,
   }
 }
 }  // namespace
+
+
+
+void VersionStorageInfo::UpdateFilesByCompactionPri(
+    const ImmutableOptions& ioptions, const MutableCFOptions& options, FileSystem* fs_){
+
+
+  if (compaction_style_ == kCompactionStyleNone ||
+      compaction_style_ == kCompactionStyleFIFO ||
+      compaction_style_ == kCompactionStyleUniversal) {
+    // don't need this
+    return;
+  }
+
+#if (defined znskv_pri) || (defined znskv_migrate) || (defined znskv_log)
+  auto zen_fs = dynamic_cast<ZenFS*>(fs_);
+
+  BDZenFSStat stat;
+  zen_fs->GetStat(stat);
+#endif
+
+#if (defined znskv_migrate)
+  std::set<uint64_t> migrate_zone_ids;
+  for (const auto& zone : stat.zone_stats_) {
+    // Collect all zones with over 90% garbage
+    if (zone.GarbageRate() > 0.9) {
+      migrate_zone_ids.emplace(zone.start_position);
+      break;
+    }
+  }
+  // Migrate all proper extents larger than `min_szie`
+  uint32_t min_size = 128 << 10;
+  std::vector<ZoneExtentSnapshot*> migrate_exts;
+  for (auto& ext : stat.snapshot_.extents_) {
+    if (migrate_zone_ids.find(ext.zone_start) != migrate_zone_ids.end() &&
+        ext.length > min_size) {
+      migrate_exts.push_back(&ext);
+      FILE *fp = NULL;	
+      fp = fopen(LOGFILE, "a+");
+      fprintf(fp,"Migratefilename:%s\n",ext.filename.c_str());      
+      fclose(fp);
+    }
+  }
+  zen_fs->MigrateExtents(migrate_exts); 
+#endif
+
+#if (defined znskv_log)
+  printfsstinzone(stat);
+#endif
+
+#if (defined znskv_pri)
+  float zoneunusepersent=0;
+  std::unordered_map<uint64_t, float> znsfile_to_zoneunusepersent;
+  for (auto& zone : stat.zone_stats_) {
+    for (auto& znsfile : zone.files) {
+      if(znsfile.filename.length()>4 && znsfile.filename.substr(znsfile.filename.length() - 3, 3)=="sst" ){
+        zoneunusepersent = std::max(znsfile_to_zoneunusepersent[atoi(znsfile.filename.substr(znsfile.filename.length() - 10, 6).c_str())],(float)zone.reclaim_capacity/(zone.free_capacity+zone.used_capacity+zone.reclaim_capacity));
+        znsfile_to_zoneunusepersent[atoi(znsfile.filename.substr(znsfile.filename.length() - 10, 6).c_str())]=zoneunusepersent;
+      }
+    }
+  }
+#endif
+
+  // No need to sort the highest level because it is never compacted.
+  for (int level = 0; level < num_levels() - 1; level++) {
+    const std::vector<FileMetaData*>& files = files_[level];
+    auto& files_by_compaction_pri = files_by_compaction_pri_[level];
+    assert(files_by_compaction_pri.size() == 0);
+
+    // populate a temp vector for sorting based on size
+    std::vector<Fsize> temp(files.size());
+    for (size_t i = 0; i < files.size(); i++) {
+      temp[i].index = i;
+      temp[i].file = files[i];
+    }
+
+    // sort the top number_of_files_to_sort_ based on file size
+    size_t num = VersionStorageInfo::kNumberFilesToSort;
+    if (num > temp.size()) {
+      num = temp.size();
+    }
+    switch (ioptions.compaction_pri) {
+      case kByCompensatedSize:
+        std::partial_sort(temp.begin(), temp.begin() + num, temp.end(),
+                          CompareCompensatedSizeDescending);
+        break;
+      case kOldestLargestSeqFirst:
+        std::sort(temp.begin(), temp.end(),
+                  [](const Fsize& f1, const Fsize& f2) -> bool {
+                    return f1.file->fd.largest_seqno <
+                           f2.file->fd.largest_seqno;
+                  });
+        break;
+      case kOldestSmallestSeqFirst:
+        std::sort(temp.begin(), temp.end(),
+                  [](const Fsize& f1, const Fsize& f2) -> bool {
+                    return f1.file->fd.smallest_seqno <
+                           f2.file->fd.smallest_seqno;
+                  });
+        break;
+      case kMinOverlappingRatio:
+#if (defined znskv_pri)
+        SortFileByOverlappingRatio(*internal_comparator_, files_[level],
+                                   files_[level + 1], ioptions.clock, level,
+                                   num_non_empty_levels_, options.ttl, &temp, znsfile_to_zoneunusepersent);
+#elif (defined GearDB)
+        SortFileByOverlappingRatio(*internal_comparator_, files_[level],
+                                   files_[level + 1], ioptions.clock, level,
+                                   num_non_empty_levels_, options.ttl, &temp);      
+#else
+        SortFileByOverlappingRatio(*internal_comparator_, files_[level],
+                                   files_[level + 1], ioptions.clock, level,
+                                   num_non_empty_levels_, options.ttl, &temp);
+#endif
+        break;
+      case kRoundRobin:
+        SortFileByRoundRobin(*internal_comparator_, &compact_cursor_,
+                             level0_non_overlapping_, level, &temp);
+        break;
+      default:
+        assert(false);
+    }
+    assert(temp.size() == files.size());
+
+    // initialize files_by_compaction_pri_
+    for (size_t i = 0; i < temp.size(); i++) {
+      files_by_compaction_pri.push_back(static_cast<int>(temp[i].index));
+    }
+    next_file_to_compact_by_size_[level] = 0;
+    assert(files_[level].size() == files_by_compaction_pri_[level].size());
+  }
+}
 
 void VersionStorageInfo::UpdateFilesByCompactionPri(
     const ImmutableOptions& ioptions, const MutableCFOptions& options) {
