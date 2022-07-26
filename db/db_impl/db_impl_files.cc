@@ -20,7 +20,8 @@
 #include "port/port.h"
 #include "util/autovector.h"
 #include "util/defer.h"
-
+#include "rocksdb/macros.h"
+#include <spdlog/spdlog.h>
 namespace ROCKSDB_NAMESPACE {
 
 uint64_t DBImpl::MinLogNumberToKeep() {
@@ -425,6 +426,9 @@ void DBImpl::PurgeObsoleteFiles(JobContext& state, bool schedule_only) {
       table_cache_->Release(file.metadata->table_reader_handle);
     }
     file.DeleteMetadata();
+#ifdef SSTLIFETIMESTAT
+    SPDLOG_INFO("ID{} IT{}", file.metadata->fd.packed_number_and_path_id, time(0));
+#endif
   }
 
   for (const auto& blob_file : state.blob_delete_files) {

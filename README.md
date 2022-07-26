@@ -51,14 +51,22 @@ echo deadline > /sys/class/block/nvme0n1/queue/scheduler
 ```
 4. run dbbench
 ```
-/home/lby/rocksdb/db_bench --fs_uri=zenfs://dev:nvme0n1 --benchmarks="fillrandom,stats" \
---use_direct_reads --key_size=16 --value_size=800 \
-       --target_file_size_base=2147483648 \
-       --use_direct_io_for_flush_and_compaction \
-       --max_bytes_for_level_multiplier=4 --write_buffer_size=2147483648 \
-       --target_file_size_multiplier=1 --num=10000000 --threads=2 \
-       --max_background_jobs=4 \
-       -compression_type=None --statistics >> dblog
+./db_bench \
+--fs_uri=zenfs://dev:nvme0n1 \
+--benchmarks="fillrandom,stats,sstables,levelstats" \
+--num=200000000 \
+--value_size=1024 \
+--key_size=16 \
+--min_write_buffer_number_to_merge=2 \
+--max_write_buffer_number=6 \
+--write_buffer_size=67108864 \
+--target_file_size_base=67108864 \
+-max_bytes_for_level_multiplier=10\qq
+--max_background_compactions=32 \
+--max_background_flushes=4 \
+--statistics \
+--use_direct_io_for_flush_and_compaction \
+--compression_type=none > benchmarkslog/db_bench/log.1
 ```
 ### config file
 - include/rocksdb/macros.h

@@ -55,6 +55,7 @@
 #include "util/stop_watch.h"
 #include "rocksdb/zonestate.h"
 #include "rocksdb/macros.h"
+#include <spdlog/spdlog.h>
 unordered_map<int,int> sst_lifetime;
 
 namespace ROCKSDB_NAMESPACE {
@@ -1232,7 +1233,7 @@ Status CompactionJob::FinishCompactionOutputFile(
   // Check for iterator errors
   Status s = input_status;
 
-  #if (defined znskv_lifetime_pri)
+  #if (defined znskv_lifetime)
   int mylevel=sub_compact->compaction->output_level();
   //if(mylevel>1&&cfd->current()->storage_info()->CompactionScore(mylevel+1)>0.8){
   std::string smallest=meta->smallest.user_key().ToString(1).substr(0,16);
@@ -1310,6 +1311,73 @@ Status CompactionJob::FinishCompactionOutputFile(
     sst_lifetime[meta->fd.packed_number_and_path_id]=lifetime;
     //}
 #endif
+  #ifdef SSTLIFETIMESTAT
+  int outputlevel = sub_compact->compaction->output_level();
+  if (outputlevel > 0 && outputlevel < cfd->current()->storage_info()->num_levels()){
+    uint64_t u_overlapping_filenums = 0;
+    //count upperlevel overlap
+    auto uplevelfiles=cfd->current()->storage_info()->LevelFiles(outputlevel-1);
+    auto up_level_it=uplevelfiles.begin();
+    // Skip files in next level that is smaller than current file
+    while (up_level_it != uplevelfiles.end() &&
+          cfd->user_comparator()->Compare((*up_level_it)->largest.user_key(), meta->smallest.user_key()) < 0) {
+          up_level_it++;
+    }
+    while (up_level_it != uplevelfiles.end() &&
+          cfd->user_comparator()->Compare((*up_level_it)->smallest.user_key(), meta->largest.user_key()) < 0) {
+          u_overlapping_filenums++;
+
+          if (cfd->user_comparator()->Compare((*up_level_it)->largest.user_key(), meta->largest.user_key())> 0) {
+              // next level file cross large boundary of current file.
+              break;
+          }
+          up_level_it++;
+    }
+    uint64_t d_overlapping_filenums = 0;
+    //count nextlevel overlap
+    auto nextlevelfiles=cfd->current()->storage_info()->LevelFiles(outputlevel+1);
+    auto next_level_it=nextlevelfiles.begin();
+    // Skip files in next level that is smaller than current file
+    while (next_level_it != nextlevelfiles.end() &&
+          cfd->user_comparator()->Compare((*next_level_it)->largest.user_key(), meta->smallest.user_key()) < 0) {
+          next_level_it++;
+    }
+    while (next_level_it != nextlevelfiles.end() &&
+          cfd->user_comparator()->Compare((*next_level_it)->smallest.user_key(), meta->largest.user_key()) < 0) {
+          d_overlapping_filenums++;
+
+          if (cfd->user_comparator()->Compare((*next_level_it)->largest.user_key(), meta->largest.user_key())> 0) {
+              // next level file cross large boundary of current file.
+              break;
+          }
+          next_level_it++;
+    }
+
+    SPDLOG_INFO("ID{} CT{} LE{} OU{} OD{}", meta->fd.packed_number_and_path_id, time(0), sub_compact->compaction->output_level(), u_overlapping_filenums,d_overlapping_filenums);
+  }else if (outputlevel == cfd->current()->storage_info()->num_levels()){
+    uint64_t u_overlapping_filenums = 0;
+    //count upperlevel overlap
+    auto uplevelfiles=cfd->current()->storage_info()->LevelFiles(outputlevel-1);
+    auto up_level_it=uplevelfiles.begin();
+    // Skip files in next level that is smaller than current file
+    while (up_level_it != uplevelfiles.end() &&
+          cfd->user_comparator()->Compare((*up_level_it)->largest.user_key(), meta->smallest.user_key()) < 0) {
+          up_level_it++;
+    }
+    while (up_level_it != uplevelfiles.end() &&
+          cfd->user_comparator()->Compare((*up_level_it)->smallest.user_key(), meta->largest.user_key()) < 0) {
+          u_overlapping_filenums++;
+
+          if (cfd->user_comparator()->Compare((*up_level_it)->largest.user_key(), meta->largest.user_key())> 0) {
+              // next level file cross large boundary of current file.
+              break;
+          }
+          up_level_it++;
+    }
+    SPDLOG_INFO("ID{} CT{} LE{} OU{} OD{}", meta->fd.packed_number_and_path_id, time(0), sub_compact->compaction->output_level(), u_overlapping_filenums, 0);
+
+  }
+  #endif
   // Add range tombstones
   auto earliest_snapshot = kMaxSequenceNumber;
   if (existing_snapshots_.size() > 0) {

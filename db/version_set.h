@@ -164,10 +164,10 @@ class VersionStorageInfo {
   void ReserveBlob(size_t size) { blob_files_.reserve(size); }
 
   void AddBlobFile(std::shared_ptr<BlobFileMetaData> blob_file_meta);
-
+#if (defined znskv_pri) || (defined znskv_migrate) || (defined znskv_log)
   void PrepareForVersionAppend(const ImmutableOptions& immutable_options,
                                const MutableCFOptions& mutable_cf_options, FileSystem* fs_);
-
+#endif
   void PrepareForVersionAppend(const ImmutableOptions& immutable_options,
                                const MutableCFOptions& mutable_cf_options);
 
@@ -582,9 +582,10 @@ class VersionStorageInfo {
   void UpdateNumNonEmptyLevels();
   void CalculateBaseBytes(const ImmutableOptions& ioptions,
                           const MutableCFOptions& options);
-
+#if (defined znskv_pri) || (defined znskv_migrate) || (defined znskv_log)
   void UpdateFilesByCompactionPri(const ImmutableOptions& immutable_options,
                                   const MutableCFOptions& mutable_cf_options, FileSystem* fs_);
+#endif                                  
   void UpdateFilesByCompactionPri(const ImmutableOptions& immutable_options,
                                   const MutableCFOptions& mutable_cf_options);                    
 
@@ -1388,6 +1389,11 @@ class VersionSet {
                         uint64_t min_pending_output);
 
   ColumnFamilySet* GetColumnFamilySet() { return column_family_set_.get(); }
+
+  FileSystem* getFileSystem(){
+    return fs_.get();
+  }
+
   RefedColumnFamilySet GetRefedColumnFamilySet() {
     return RefedColumnFamilySet(GetColumnFamilySet());
   }
