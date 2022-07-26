@@ -1312,8 +1312,9 @@ Status CompactionJob::FinishCompactionOutputFile(
     //}
 #endif
   #ifdef SSTLIFETIMESTAT
+  //无法统计到最后一层的文件的生成时间，可能因为最后一层的文件都是move下去的。
   int outputlevel = sub_compact->compaction->output_level();
-  if (outputlevel > 0 && outputlevel < cfd->current()->storage_info()->num_levels()){
+  if (outputlevel > 0 && outputlevel < cfd->current()->storage_info()->num_levels() - 1){
     uint64_t u_overlapping_filenums = 0;
     //count upperlevel overlap
     auto uplevelfiles=cfd->current()->storage_info()->LevelFiles(outputlevel-1);
@@ -1354,7 +1355,7 @@ Status CompactionJob::FinishCompactionOutputFile(
     }
 
     SPDLOG_INFO("ID{} CT{} LE{} OU{} OD{}", meta->fd.packed_number_and_path_id, time(0), sub_compact->compaction->output_level(), u_overlapping_filenums,d_overlapping_filenums);
-  }else if (outputlevel == cfd->current()->storage_info()->num_levels()){
+  }else if (outputlevel == cfd->current()->storage_info()->num_levels() - 1){
     uint64_t u_overlapping_filenums = 0;
     //count upperlevel overlap
     auto uplevelfiles=cfd->current()->storage_info()->LevelFiles(outputlevel-1);
@@ -1374,7 +1375,7 @@ Status CompactionJob::FinishCompactionOutputFile(
           }
           up_level_it++;
     }
-    SPDLOG_INFO("ID{} CT{} LE{} OU{} OD{}", meta->fd.packed_number_and_path_id, time(0), sub_compact->compaction->output_level(), u_overlapping_filenums, 0);
+    SPDLOG_INFO("ID{} CT{} LE{} OU{} OD{} H", meta->fd.packed_number_and_path_id, time(0), sub_compact->compaction->output_level(), u_overlapping_filenums, 0);
 
   }
   #endif

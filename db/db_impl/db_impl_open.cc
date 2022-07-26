@@ -1663,7 +1663,7 @@ Status DB::Open(const DBOptions& db_options, const std::string& dbname,
                 std::vector<ColumnFamilyHandle*>* handles, DB** dbptr) {
   const bool kSeqPerBatch = true;
   const bool kBatchPerTxn = true;
-  auto logfile = spdlog::basic_logger_mt<spdlog::async_factory>("async_file_logger", SPDLOGFILE);
+  static auto logfile = spdlog::basic_logger_mt<spdlog::async_factory>("async_file_logger", SPDLOGFILE);
   spdlog::set_default_logger(logfile);
   return DBImpl::Open(db_options, dbname, column_families, handles, dbptr,
                       !kSeqPerBatch, kBatchPerTxn);

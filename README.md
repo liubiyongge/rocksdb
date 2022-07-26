@@ -31,7 +31,7 @@ Questions and discussions are welcome on the [RocksDB Developers Public](https:/
 1. compile rocksdb
 
 ```
-sudo DEBUG_LEVEL=0 ROCKSDB_PLUGINS=zenfs make -j48 db_bench install
+sudo DEBUG_LEVEL=0 ROCKSDB_PLUGINS=zenfs make -j24 db_bench install
 # must install
 # do not use cmake, it is too old. build by make.
 ```
@@ -45,14 +45,14 @@ make
 3. dbbench prepare
 ```
 sudo su
-echo deadline > /sys/class/block/nvme0n1/queue/scheduler
+echo deadline > /sys/class/block/nvme2n1/queue/scheduler
 # mkdir /home/lby/zfsfile/
-/home/lby/rocksdb/plugin/zenfs/util/zenfs mkfs --zbd=nvme0n1 --aux_path=/home/lby/zfsfile/ --force
+/home/lby/rocksdb/plugin/zenfs/util/zenfs mkfs --zbd=nvme2n1 --aux_path=/home/lby/zfsfile/ --force
 ```
 4. run dbbench
 ```
-./db_bench \
---fs_uri=zenfs://dev:nvme0n1 \
+/home/lby/rocksdb/db_bench \
+--fs_uri=zenfs://dev:nvme2n1 \
 --benchmarks="fillrandom,stats,sstables,levelstats" \
 --num=200000000 \
 --value_size=1024 \
@@ -61,12 +61,31 @@ echo deadline > /sys/class/block/nvme0n1/queue/scheduler
 --max_write_buffer_number=6 \
 --write_buffer_size=67108864 \
 --target_file_size_base=67108864 \
--max_bytes_for_level_multiplier=10\qq
+-max_bytes_for_level_multiplier=10 \
 --max_background_compactions=32 \
 --max_background_flushes=4 \
 --statistics \
 --use_direct_io_for_flush_and_compaction \
---compression_type=none > benchmarkslog/db_bench/log.1
+--compression_type=none > benchmarkslog/log.1
+```
+
+```
+/home/lby/rocksdb/db_bench \
+--fs_uri=zenfs://dev:nvme2n1 \
+--benchmarks="fillrandom,stats,sstables,levelstats" \
+--num=10000000 \
+--value_size=1024 \
+--key_size=16 \
+--min_write_buffer_number_to_merge=2 \
+--max_write_buffer_number=6 \
+--write_buffer_size=67108864 \
+--target_file_size_base=67108864 \
+-max_bytes_for_level_multiplier=10 \
+--max_background_compactions=32 \
+--max_background_flushes=4 \
+--statistics \
+--use_direct_io_for_flush_and_compaction \
+--compression_type=none > benchmarkslog/log.1
 ```
 ### config file
 - include/rocksdb/macros.h

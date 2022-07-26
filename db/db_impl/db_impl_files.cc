@@ -418,6 +418,9 @@ void DBImpl::PurgeObsoleteFiles(JobContext& state, bool schedule_only) {
       state.manifest_delete_files.size());
   // We may ignore the dbname when generating the file names.
   for (auto& file : state.sst_delete_files) {
+    #ifdef SSTLIFETIMESTAT
+    SPDLOG_INFO("ID{} IT{}", file.metadata->fd.packed_number_and_path_id,time(0));
+    #endif
     if (!file.only_delete_metadata) {
       candidate_files.emplace_back(
           MakeTableFileName(file.metadata->fd.GetNumber()), file.path);
@@ -426,9 +429,6 @@ void DBImpl::PurgeObsoleteFiles(JobContext& state, bool schedule_only) {
       table_cache_->Release(file.metadata->table_reader_handle);
     }
     file.DeleteMetadata();
-#ifdef SSTLIFETIMESTAT
-    SPDLOG_INFO("ID{} IT{}", file.metadata->fd.packed_number_and_path_id, time(0));
-#endif
   }
 
   for (const auto& blob_file : state.blob_delete_files) {
