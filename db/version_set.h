@@ -56,6 +56,7 @@
 #include "trace_replay/block_cache_tracer.h"
 #include "util/coro_utils.h"
 #include "util/hash_containers.h"
+#include "db/lbymacro.h"
 
 namespace ROCKSDB_NAMESPACE {
 

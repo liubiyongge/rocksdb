@@ -10,6 +10,7 @@
 #pragma once
 
 #include "db/compaction/compaction_picker.h"
+#include "db/lbymacro.h"
 
 namespace ROCKSDB_NAMESPACE {
 // Picking compactions for leveled compaction. See wiki page

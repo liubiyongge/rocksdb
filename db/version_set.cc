@@ -2755,36 +2755,54 @@ void VersionStorageInfo::ComputeCompactionScore(
         }
       }
     } else {
-      // Compute the ratio of current size to size limit.
-      uint64_t level_bytes_no_compacting = 0;
-      uint64_t level_total_bytes = 0;
-      for (auto f : files_[level]) {
-        level_total_bytes += f->fd.GetFileSize();
-        if (!f->being_compacted) {
-          level_bytes_no_compacting += f->compensated_file_size;
+      if (level % (TIER_RESERVE_SIZE + 1) == 1){// level
+                // Compute the ratio of current size to size limit.
+        uint64_t level_bytes_no_compacting = 0;
+        for (auto f : files_[level]) {
+           
+          if (!f->being_compacted) {
+            level_bytes_no_compacting += f->fd.GetFileSize();
+            level_bytes_no_compacting += f->compensated_file_size;
+          }
+        }
+        score = static_cast<double>(level_bytes_no_compacting) /
+                  MaxBytesForLevel(level);
+        compaction_score_[level] = score;
+        compaction_level_[level] = level;
+      }else if (level % (TIER_RESERVE_SIZE + 1) == 0){// last level in tier
+        if(files_[level].size() != 0){
+          compaction_score_[level] += 1.0 / TIER_SORT_RUN_BASE;//tier score
+        }        
+
+      }else if (level % (TIER_RESERVE_SIZE + 1) == 2){// first level in tier
+          int last_level_in_the_tier = (level / (TIER_RESERVE_SIZE + 1) + 1) * (TIER_RESERVE_SIZE + 1);
+          compaction_score_[last_level_in_the_tier] = 0;
+        if(files_[level].size() == 0){//empty
+          compaction_score_[level] = 0.0;
+          compaction_level_[level] = level;
+          continue;
+        }
+        compaction_score_[last_level_in_the_tier] += 1.0 / TIER_SORT_RUN_BASE;
+        if(files_[level+1].size() == 0){// non-empty and next sort-run empty
+          compaction_score_[level] = MAX_SCORE;
+          compaction_level_[level] = level;
+        }
+
+      }else{
+        if(files_[level].size() == 0){
+          compaction_score_[level] = 0.0;
+          compaction_level_[level] = level;
+          continue;
+        }
+        int last_level_in_the_tier = (level / (TIER_RESERVE_SIZE + 1) + 1) * (TIER_RESERVE_SIZE + 1);
+        compaction_score_[last_level_in_the_tier] += 1.0 / TIER_SORT_RUN_BASE;
+        if(files_[level+1].size() == 0){// non-empty and next sort-run empty
+          compaction_score_[level] = MAX_SCORE;
+          compaction_level_[level] = level;
         }
       }
-      if (!immutable_options.level_compaction_dynamic_level_bytes ||
-          level_bytes_no_compacting < MaxBytesForLevel(level)) {
-        score = static_cast<double>(level_bytes_no_compacting) /
-                MaxBytesForLevel(level);
-      } else {
-        // If there are a large mount of data being compacted down to the
-        // current level soon, we would de-prioritize compaction from
-        // a level where the incoming data would be a large ratio. We do
-        // it by dividing level size not by target level size, but
-        // the target size and the incoming compaction bytes.
-        score = static_cast<double>(level_bytes_no_compacting) /
-                (MaxBytesForLevel(level) + total_downcompact_bytes) *
-                kScoreScale;
-      }
-      if (level_total_bytes > MaxBytesForLevel(level)) {
-        total_downcompact_bytes +=
-            static_cast<double>(level_total_bytes - MaxBytesForLevel(level));
-      }
     }
-    compaction_level_[level] = level;
-    compaction_score_[level] = score;
+
   }
 
   // sort all the levels based on their score. Higher scores get listed
@@ -3130,6 +3148,90 @@ void VersionStorageInfo::UpdateNumNonEmptyLevels() {
 namespace {
 // Sort `temp` based on ratio of overlapping size over file size
 void SortFileByOverlappingRatio(
+    const InternalKeyComparator& icmp, const std::vector<FileMetaData*>* files_, SystemClock* clock,
+    int high_level_in_tier, int level, int num_non_empty_levels, uint64_t ttl,
+    std::vector<Fsize>* temp){
+    std::unordered_map<uint64_t, uint64_t> file_to_order;
+    const std::vector<FileMetaData*> files = files_[level];
+    std::vector<std::vector<rocksdb::FileMetaData *>::const_iterator> next_tier_its;
+    for(int i = high_level_in_tier; i <= level; i++){
+      next_tier_its.push_back(files_[i].begin());
+    }
+    for (auto& file : files) {
+      uint64_t overlapping_bytes_tier = 0;
+      uint64_t overlapping_bytes_level = 0;
+      rocksdb::InternalKey smallest =  file->smallest;
+      rocksdb::InternalKey largest  = file->largest;
+      for(int i = high_level_in_tier; i <= level; i++){
+        const std::vector<FileMetaData*> next_level_files = files_[i];
+        //jump to left
+        while(next_tier_its[i] != files_[i].begin() && icmp.Compare((*next_tier_its[i])->largest, smallest) > 0){
+          next_tier_its[i]--;
+        }
+        //jump to right
+        while(next_tier_its[i] != files_[i].end() && icmp.Compare((*next_tier_its[i])->largest, smallest) < 0){
+          next_tier_its[i]++;
+        }
+
+        //now smallest inside next_tier_its range
+        while(next_tier_its[i] != files_[i].end() && icmp.Compare((*next_tier_its[i])->smallest, largest) < 0){
+          overlapping_bytes_tier += (*next_tier_its[i])->fd.file_size;
+          smallest = icmp.Compare((*next_tier_its[i])->smallest, smallest)>0?smallest:(*next_tier_its[i])->smallest;
+          largest = icmp.Compare((*next_tier_its[i])->largest, largest)>0?(*next_tier_its[i])->largest:largest;
+          if (icmp.Compare((*next_tier_its[i])->largest, largest) > 0) {
+          // next level file cross large boundary of current file.
+          break;
+          }
+          next_tier_its[i]++;
+        }
+
+      }
+      
+      auto next_level_it = files_[level+1].begin();
+      // Skip files in next level that is smaller than current file
+      while (next_level_it != files_[level+1].end() &&
+            icmp.Compare((*next_level_it)->largest, smallest) < 0) {
+        next_level_it++;
+      }
+
+      while (next_level_it != files_[level+1].end() &&
+            icmp.Compare((*next_level_it)->smallest, largest) < 0) {
+        overlapping_bytes_level += (*next_level_it)->fd.file_size;
+
+        if (icmp.Compare((*next_level_it)->largest, largest) > 0) {
+          // next level file cross large boundary of current file.
+          break;
+        }
+        next_level_it++;
+      }
+      assert(file->compensated_file_size != 0);
+      file_to_order[file->fd.GetNumber()] = overlapping_bytes_tier * 1024U  / 
+                                            (overlapping_bytes_level + 1024U); // big is high priori
+      
+      size_t num_to_sort = temp->size() > VersionStorageInfo::kNumberFilesToSort
+                           ? VersionStorageInfo::kNumberFilesToSort
+                           : temp->size();
+
+      std::partial_sort(temp->begin(), temp->begin() + num_to_sort, temp->end(),
+                    [&](const Fsize& f1, const Fsize& f2) -> bool {
+                      // If score is the same, pick file with smaller keys.
+                      // This makes the algorithm more deterministic, and also
+                      // help the trivial move case to have more files to
+                      // extend.
+                      if (file_to_order[f1.file->fd.GetNumber()] ==
+                          file_to_order[f2.file->fd.GetNumber()]) {
+                        return icmp.Compare(f1.file->smallest,
+                                            f2.file->smallest) < 0;
+                      }
+                      return file_to_order[f1.file->fd.GetNumber()] >
+                             file_to_order[f2.file->fd.GetNumber()];
+                    });
+
+    }
+
+}
+
+void SortFileByOverlappingRatio(
     const InternalKeyComparator& icmp, const std::vector<FileMetaData*>& files,
     const std::vector<FileMetaData*>& next_level_files, SystemClock* clock,
     int level, int num_non_empty_levels, uint64_t ttl,
@@ -3257,8 +3359,12 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(
     // don't need this
     return;
   }
+  
   // No need to sort the highest level because it is never compacted.
   for (int level = 0; level < num_levels() - 1; level++) {
+    next_file_to_compact_by_size_[level] = 0;
+    if(level  == 0){
+      
     const std::vector<FileMetaData*>& files = files_[level];
     auto& files_by_compaction_pri = files_by_compaction_pri_[level];
     assert(files_by_compaction_pri.size() == 0);
@@ -3275,6 +3381,7 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(
     if (num > temp.size()) {
       num = temp.size();
     }
+
     switch (ioptions.compaction_pri) {
       case kByCompensatedSize:
         std::partial_sort(temp.begin(), temp.begin() + num, temp.end(),
@@ -3312,7 +3419,69 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(
     for (size_t i = 0; i < temp.size(); i++) {
       files_by_compaction_pri.push_back(static_cast<int>(temp[i].index));
     }
-    next_file_to_compact_by_size_[level] = 0;
+
+    }else if(level   % (TIER_RESERVE_SIZE + 1) == 0){
+      int high_level_in_tier = level - TIER_RESERVE_SIZE + 1;
+      while(files_[high_level_in_tier].size() == 0){
+        high_level_in_tier++;
+      }
+      
+      const std::vector<FileMetaData*>& files = files_[level];
+      auto& files_by_compaction_pri = files_by_compaction_pri_[level];
+      assert(files_by_compaction_pri.size() == 0);
+
+      // populate a temp vector for sorting based on size
+      std::vector<Fsize> temp(files.size());
+      for (size_t i = 0; i < files.size(); i++) {
+        temp[i].index = i;
+        temp[i].file = files[i];
+      }
+
+      // sort the top number_of_files_to_sort_ based on file size
+      size_t num = VersionStorageInfo::kNumberFilesToSort;
+      if (num > temp.size()) {
+        num = temp.size();
+      }
+      
+      switch (ioptions.compaction_pri) {
+        case kByCompensatedSize:
+          std::partial_sort(temp.begin(), temp.begin() + num, temp.end(),
+                            CompareCompensatedSizeDescending);
+          break;
+        case kOldestLargestSeqFirst:
+          std::sort(temp.begin(), temp.end(),
+                    [](const Fsize& f1, const Fsize& f2) -> bool {
+                      return f1.file->fd.largest_seqno <
+                            f2.file->fd.largest_seqno;
+                    });
+          break;
+        case kOldestSmallestSeqFirst:
+          std::sort(temp.begin(), temp.end(),
+                    [](const Fsize& f1, const Fsize& f2) -> bool {
+                      return f1.file->fd.smallest_seqno <
+                            f2.file->fd.smallest_seqno;
+                    });
+          break;
+        case kMinOverlappingRatio:
+          SortFileByOverlappingRatio(*internal_comparator_, files_, ioptions.clock, high_level_in_tier, level,
+                                    num_non_empty_levels_, options.ttl, &temp);
+          break;
+        case kRoundRobin:
+          SortFileByRoundRobin(*internal_comparator_, &compact_cursor_,
+                              level0_non_overlapping_, level, &temp);
+          break;
+        default:
+          assert(false);
+      }
+      // initialize files_by_compaction_pri_
+      for (size_t i = 0; i < temp.size(); i++) {
+      files_by_compaction_pri.push_back(static_cast<int>(temp[i].index));
+      }
+
+    }else{
+      
+      continue;
+    }
     assert(files_[level].size() == files_by_compaction_pri_[level].size());
   }
 }
@@ -3779,10 +3948,15 @@ void VersionStorageInfo::CalculateBaseBytes(const ImmutableOptions& ioptions,
       if (i == 0 && ioptions.compaction_style == kCompactionStyleUniversal) {
         level_max_bytes_[i] = options.max_bytes_for_level_base;
       } else if (i > 1) {
+        if (i % (TIER_RESERVE_SIZE + 1) == 1){
         level_max_bytes_[i] = MultiplyCheckOverflow(
-            MultiplyCheckOverflow(level_max_bytes_[i - 1],
-                                  options.max_bytes_for_level_multiplier),
-            options.MaxBytesMultiplerAdditional(i - 1));
+            MultiplyCheckOverflow(level_max_bytes_[i - (TIER_RESERVE_SIZE + 1)],
+                                  options.max_bytes_for_level_multiplier),options.MaxBytesMultiplerAdditional(i - 1));
+        }else if (i % (TIER_RESERVE_SIZE + 1) == 0){
+          level_max_bytes_[i] = level_max_bytes_[i - TIER_RESERVE_SIZE];
+        }else {
+          level_max_bytes_[i] = level_max_bytes_[(i / (TIER_RESERVE_SIZE + 1) + 1) * (TIER_RESERVE_SIZE + 1) + 1];
+        }
       } else {
         level_max_bytes_[i] = options.max_bytes_for_level_base;
       }

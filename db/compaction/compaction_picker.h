@@ -240,6 +240,8 @@ class CompactionPicker {
   std::unordered_set<Compaction*> compactions_in_progress_;
 
   const InternalKeyComparator* const icmp_;
+
+
 };
 
 #ifndef ROCKSDB_LITE
