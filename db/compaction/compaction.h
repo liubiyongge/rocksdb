@@ -53,8 +53,6 @@ struct AtomicCompactionUnitBoundary {
 // with the same physical level.
 struct CompactionInputFiles {
   int level;
-  InternalKey inputSmallest;
-  InternalKey inputLargest;
   std::vector<FileMetaData*> files;
   std::vector<AtomicCompactionUnitBoundary> atomic_compaction_unit_boundaries;
   inline bool empty() const { return files.empty(); }

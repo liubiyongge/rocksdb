@@ -200,7 +200,7 @@ void LevelCompactionBuilder::SetupInitialFiles() {
       }else if(start_level_  % (TIER_RESERVE_SIZE + 1) == 0){// 0 and last level in tier
         output_level_ = start_level_ + 1;
       }else{
-        output_level_ = (start_level_ / (TIER_RESERVE_SIZE + 1)) * (TIER_RESERVE_SIZE + 1) + 1; 
+        output_level_ = (start_level_ / (TIER_RESERVE_SIZE + 1) + 1) * (TIER_RESERVE_SIZE + 1) + 1; 
       }
 
 
