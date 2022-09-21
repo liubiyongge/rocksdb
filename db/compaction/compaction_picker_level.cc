@@ -190,15 +190,20 @@ void LevelCompactionBuilder::SetupInitialFiles() {
         // may starve.
         continue;
       }
-      if(start_level_  % (TIER_RESERVE_SIZE + 1) == 1){
+
+      if(start_level_  % (TIER_RESERVE_SIZE + 1) == 1){//compute output level
         int tierintra = 1;
-        while(vstorage_->NumLevelFiles(start_level_ + tierintra) == 0 && tierintra <= 10){
+        while(tierintra <= 10 && vstorage_->NumLevelFiles(start_level_ + tierintra) == 0){
           tierintra++;
         }
         output_level_ = start_level_ + tierintra - 1;
       }else if(start_level_  % (TIER_RESERVE_SIZE + 1) == 0){// 0 and last level in tier
         output_level_ = start_level_ + 1;
+      }else{
+        output_level_ = (start_level_ / (TIER_RESERVE_SIZE + 1)) * (TIER_RESERVE_SIZE + 1) + 1; 
       }
+
+
       if (PickFileToCompact()) {
         // found the compaction!
         if (start_level_ == 0) {
@@ -290,7 +295,7 @@ bool LevelCompactionBuilder::SetupOtherInputsIfNeeded() {
   // Setup input files from output level. For output to L0, we only compact
   // spans of files that do not interact with any pending compactions, so don't
   // need to consider other levels.
-  if (output_level_ != 0) {
+  if(output_level_ == 1){//L0 -> L1
     output_level_inputs_.level = output_level_;
     if (!is_l0_trivial_move_ &&
         !compaction_picker_->SetupOtherInputs(
@@ -320,7 +325,50 @@ bool LevelCompactionBuilder::SetupOtherInputsIfNeeded() {
       compaction_picker_->GetGrandparents(vstorage_, start_level_inputs_,
                                           output_level_inputs_, &grandparents_);
     }
-  } else {
+  }else if(output_level_ % (TIER_RESERVE_SIZE + 1)== 1){
+    if (!is_l0_trivial_move_) {
+      InternalKey smallest, largest;
+      output_level_inputs_.level = output_level_;
+      smallest = start_level_inputs_.files[0]->smallest;
+      largest = start_level_inputs_.files[0]->largest;
+      int high_level_in_tier = start_level_ - TIER_RESERVE_SIZE + 1;
+      while(vstorage_->NumLevelFiles(high_level_in_tier) == 0){
+        high_level_in_tier++;//search high sort run in tier;
+      }
+      for(int sortrun = high_level_in_tier; sortrun <= output_level_; sortrun++){
+        CompactionInputFiles output_level_inputs;
+        output_level_inputs.level = sortrun;
+        vstorage_->GetOverlappingInputs(output_level_inputs.level, &smallest, &largest, &(output_level_inputs.files), parent_index_, &parent_index_);
+        if (compaction_picker_->AreFilesInCompaction(output_level_inputs.files)) {
+          return false;
+        }
+        if (!output_level_inputs.empty()) {
+          if (!compaction_picker_->ExpandInputsToCleanCut(cf_name_, vstorage_, &output_level_inputs)) {
+            return false;
+          }
+        }
+        if(!output_level_inputs.empty()){
+          smallest = compaction_picker_->icmp()->Compare(smallest, output_level_inputs.files[0]->smallest) > 0?output_level_inputs.files[0]->smallest:smallest;
+          largest = compaction_picker_->icmp()->Compare(largest, output_level_inputs.files[output_level_inputs.files.size() - 1]->largest) > 0?largest:output_level_inputs.files[output_level_inputs.files.size() - 1]->largest;
+          compaction_inputs_.push_back(std::move(output_level_inputs));
+          }
+       
+      }
+      if (compaction_picker_->FilesRangeOverlapWithCompaction(
+              compaction_inputs_, output_level_)) {
+        // This compaction output could potentially conflict with the output
+        // of a currently running compaction, we cannot run it.
+        return false;
+      }
+      for (int lbylevel = output_level_inputs_.level + 1; lbylevel < compaction_picker_->NumberLevels(); lbylevel++) {
+        vstorage_->GetOverlappingInputs(lbylevel, &smallest, &largest, &grandparents_);
+        if (!grandparents_.empty()) {
+          break;
+        }
+      }
+
+    }
+  }else{
     compaction_inputs_.push_back(start_level_inputs_);
   }
   return true;
@@ -661,17 +709,12 @@ bool LevelCompactionBuilder::PickFileToCompact() {
     return start_level_inputs_.size() > 0;
     
   }else if(start_level_  % (TIER_RESERVE_SIZE + 1) == 0){
-       const std::vector<FileMetaData*>& level_files =
-        vstorage_->LevelFiles(start_level_);
-
-    // Pick the file with the highest score in this level that is not already
+    const std::vector<FileMetaData*>& level_files =
+    vstorage_->LevelFiles(start_level_);
+     // Pick the file with the highest score in this level that is not already
     // being compacted.
     const std::vector<int>& file_scores =
         vstorage_->FilesByCompactionPri(start_level_);
-    int high_level_in_tier = start_level_ - TIER_RESERVE_SIZE + 1;
-    while(vstorage_->LevelFiles(high_level_in_tier).size() == 0){
-      high_level_in_tier++;
-    }
 
     unsigned int cmp_idx;
     for (cmp_idx = vstorage_->NextCompactionIndex(start_level_);
@@ -693,79 +736,7 @@ bool LevelCompactionBuilder::PickFileToCompact() {
         continue;
       }
 
-      start_level_inputs_.files.push_back(f);
-
-
-
-      if (!compaction_picker_->ExpandInputsToCleanCut(cf_name_, vstorage_,
-                                                      &start_level_inputs_) ||
-          compaction_picker_->FilesRangeOverlapWithCompaction(
-              {start_level_inputs_}, output_level_)) {
-        // A locked (pending compaction) input-level file was pulled in due to
-        // user-key overlap.
-        start_level_inputs_.clear();
-
-        // To ensure every file is selcted in a round-robin manner, we cannot
-        // skip the current file. So we return false and wait for the next time
-        // we can pick this file to compact
-        if (ioptions_.compaction_pri == kRoundRobin) {
-          return false;
-        }
-        continue;
-      }
-
-      InternalKey smallest, largest;
-      compaction_picker_->GetRange(start_level_inputs_, &smallest, &largest);
-      start_level_inputs_.clear();
-      //input all related tier file
-      bool indicate = false;
-      for(int lbyi = high_level_in_tier; lbyi <= start_level_; lbyi++){
-          CompactionInputFiles output_level_inputs;
-          output_level_inputs.level = lbyi;
-          vstorage_->GetOverlappingInputs(lbyi, &smallest, &largest,
-                                      &output_level_inputs.files);
-          if (!compaction_picker_->ExpandInputsToCleanCut(cf_name_, vstorage_,
-                                                        &output_level_inputs)) {
-          start_level_inputs_.clear();
-          if (ioptions_.compaction_pri == kRoundRobin) {
-            return false;
-          }
-          indicate = true;
-          break;
-        }
-        start_level_inputs_.files.insert(start_level_inputs_.files.end(), output_level_inputs.files.begin(), output_level_inputs.files.end());
-        InternalKey tmpsmallest, tmplargest;
-        compaction_picker_->GetRange(output_level_inputs, &tmpsmallest, &tmplargest);
-        smallest = compaction_picker_->icmp()->Compare(tmpsmallest, smallest)>0?smallest:tmpsmallest;
-        largest = compaction_picker_->icmp()->Compare(tmplargest, largest)>0?tmplargest:largest;
-      }
-      if(indicate) continue;
-      start_level_inputs_.inputSmallest = smallest;
-      start_level_inputs_.inputLargest = largest;
-      // Now that input level is fully expanded, we check whether any output
-      // files are locked due to pending compaction.
-      //
-      // Note we rely on ExpandInputsToCleanCut() to tell us whether any output-
-      // level files are locked, not just the extra ones pulled in for user-key
-      // overlap.
-      CompactionInputFiles output_level_inputs;
-      output_level_inputs.level = output_level_;
-      vstorage_->GetOverlappingInputs(output_level_, &smallest, &largest,
-                                      &output_level_inputs.files);
-      if (output_level_inputs.empty()) {
-        if (TryExtendNonL0TrivialMove(index)) {
-          break;
-        }
-      } else {
-        if (!compaction_picker_->ExpandInputsToCleanCut(cf_name_, vstorage_,
-                                                        &output_level_inputs)) {
-          start_level_inputs_.clear();
-          if (ioptions_.compaction_pri == kRoundRobin) {
-            return false;
-          }
-          continue;
-        }
-      }
+      start_level_inputs_.files.push_back(f);//f后面需要删除
       base_index_ = index;
       break;
     }
@@ -774,7 +745,7 @@ bool LevelCompactionBuilder::PickFileToCompact() {
     if (ioptions_.compaction_pri != kRoundRobin) {
       vstorage_->SetNextCompactionIndex(start_level_, cmp_idx);
     }
-    return start_level_inputs_.size() > 0;
+    return start_level_inputs_.size() > 0;//
 
   }else{
       const std::vector<FileMetaData*>& level_files =
