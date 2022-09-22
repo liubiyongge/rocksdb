@@ -197,10 +197,8 @@ void LevelCompactionBuilder::SetupInitialFiles() {
           tierintra++;
         }
         output_level_ = start_level_ + tierintra - 1;
-      }else if(start_level_  % (TIER_RESERVE_SIZE + 1) == 0){// 0 and last level in tier
+      }else{// 0 and last level in tier
         output_level_ = start_level_ + 1;
-      }else{
-        output_level_ = (start_level_ / (TIER_RESERVE_SIZE + 1) + 1) * (TIER_RESERVE_SIZE + 1) + 1; 
       }
 
 
@@ -338,6 +336,7 @@ bool LevelCompactionBuilder::SetupOtherInputsIfNeeded() {
       for(int sortrun = high_level_in_tier; sortrun <= output_level_; sortrun++){
         CompactionInputFiles output_level_inputs;
         output_level_inputs.level = sortrun;
+        parent_index_ = -1; //parent_index_用于指示smallest在parent_index中
         vstorage_->GetOverlappingInputs(output_level_inputs.level, &smallest, &largest, &(output_level_inputs.files), parent_index_, &parent_index_);
         if (compaction_picker_->AreFilesInCompaction(output_level_inputs.files)) {
           return false;
@@ -750,7 +749,7 @@ bool LevelCompactionBuilder::PickFileToCompact() {
   }else{
       const std::vector<FileMetaData*>& level_files =
       vstorage_->LevelFiles(start_level_);
-      for(int lbyindex = 0; lbyindex < level_files.size(); lbyindex++){
+      for(std::size_t lbyindex = 0; lbyindex < level_files.size(); lbyindex++){
         auto* f = level_files[lbyindex];
         if (f->being_compacted) {
           continue;

@@ -307,11 +307,9 @@ bool CompactionPicker::RangeOverlapWithCompaction(
 bool CompactionPicker::FilesRangeOverlapWithCompaction(
     const std::vector<CompactionInputFiles>& inputs, int level) const {
   bool is_empty = true;
-  int start_level = -1;
   for (auto& in : inputs) {
     if (!in.empty()) {
       is_empty = false;
-      start_level = in.level;  // inputs are sorted by level
       break;
     }
   }

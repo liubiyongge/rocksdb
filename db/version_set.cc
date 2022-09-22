@@ -3131,8 +3131,8 @@ void VersionStorageInfo::UpdateNumNonEmptyLevels() {
 namespace {
 // Sort `temp` based on ratio of overlapping size over file size
 void SortFileByOverlappingRatio(
-    const InternalKeyComparator& icmp, const std::vector<FileMetaData*>* files_, SystemClock* clock,
-    int high_level_in_tier, int level, int num_non_empty_levels, uint64_t ttl,
+    const InternalKeyComparator& icmp, const std::vector<FileMetaData*>* files_,
+    int high_level_in_tier, int level,
     std::vector<Fsize>* temp){
 
     std::unordered_map<uint64_t, uint64_t> file_to_order;
@@ -3141,31 +3141,36 @@ void SortFileByOverlappingRatio(
     for(int i = high_level_in_tier; i <= level; i++){
       next_tier_its.push_back(files_[i].begin());
     }
-    for (auto& file : files) {
+    for (auto& file : files) { 
       uint64_t overlapping_bytes_tier = 0;
       uint64_t overlapping_bytes_level = 0;
       rocksdb::InternalKey smallest =  file->smallest;
       rocksdb::InternalKey largest  = file->largest;
       for(int i = high_level_in_tier; i <= level; i++){
+        int th = i - high_level_in_tier;
         //jump to left
-        while(next_tier_its[i] != files_[i].begin() && icmp.Compare((*next_tier_its[i])->largest, smallest) > 0){
-          next_tier_its[i]--;
+        //next_tier_its[i]可能已经到end()了，回退到end之前
+        if(next_tier_its[th] == files_[i].end() && next_tier_its[th] != files_[i].begin()){
+          next_tier_its[th]--;
+        } 
+        while(next_tier_its[th] != files_[i].begin() && icmp.Compare((*next_tier_its[th])->largest, smallest) > 0){
+          next_tier_its[th]--;
         }
         //jump to right
-        while(next_tier_its[i] != files_[i].end() && icmp.Compare((*next_tier_its[i])->largest, smallest) < 0){
-          next_tier_its[i]++;
+        while(next_tier_its[th] != files_[i].end() && icmp.Compare((*next_tier_its[th])->largest, smallest) < 0){
+          next_tier_its[th]++;
         }
 
         //now smallest inside next_tier_its range
-        while(next_tier_its[i] != files_[i].end() && icmp.Compare((*next_tier_its[i])->smallest, largest) < 0){
-          overlapping_bytes_tier += (*next_tier_its[i])->fd.file_size;
-          smallest = icmp.Compare((*next_tier_its[i])->smallest, smallest)>0?smallest:(*next_tier_its[i])->smallest;
-          largest = icmp.Compare((*next_tier_its[i])->largest, largest)>0?(*next_tier_its[i])->largest:largest;
-          if (icmp.Compare((*next_tier_its[i])->largest, largest) > 0) {
+        while(next_tier_its[th] != files_[i].end() && icmp.Compare((*next_tier_its[th])->smallest, largest) < 0){
+          overlapping_bytes_tier += (*next_tier_its[th])->fd.file_size;
+          smallest = icmp.Compare((*next_tier_its[th])->smallest, smallest)>0?smallest:(*next_tier_its[th])->smallest;
+          largest = icmp.Compare((*next_tier_its[th])->largest, largest)>0?(*next_tier_its[th])->largest:largest;
+          if (icmp.Compare((*next_tier_its[th])->largest, largest) > 0) {
           // next level file cross large boundary of current file.
           break;
           }
-          next_tier_its[i]++;
+          next_tier_its[th]++;
         }
 
       }
@@ -3190,7 +3195,7 @@ void SortFileByOverlappingRatio(
       assert(file->compensated_file_size != 0);
       file_to_order[file->fd.GetNumber()] = overlapping_bytes_tier * 1024U  / 
                                             (overlapping_bytes_level + 1024U); // big is high priori
-      
+    }
       size_t num_to_sort = temp->size() > VersionStorageInfo::kNumberFilesToSort
                            ? VersionStorageInfo::kNumberFilesToSort
                            : temp->size();
@@ -3210,7 +3215,6 @@ void SortFileByOverlappingRatio(
                              file_to_order[f2.file->fd.GetNumber()];
                     });
 
-    }
 
 }
 
@@ -3445,8 +3449,8 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(
                     });
           break;
         case kMinOverlappingRatio:
-          SortFileByOverlappingRatio(*internal_comparator_, files_, ioptions.clock, high_level_in_tier, level,
-                                    num_non_empty_levels_, options.ttl, &temp);
+          SortFileByOverlappingRatio(*internal_comparator_, files_, high_level_in_tier, level,
+                                    &temp);
           break;
         case kRoundRobin:
           SortFileByRoundRobin(*internal_comparator_, &compact_cursor_,
