@@ -291,10 +291,54 @@ bool LevelCompactionBuilder::SetupOtherInputsIfNeeded() {
       return false;
     }
 
-    compaction_inputs_.push_back(start_level_inputs_);
-    if (!output_level_inputs_.empty()) {
-      compaction_inputs_.push_back(output_level_inputs_);
+    if(!output_level_inputs_.empty() && start_level_inputs_.level > 1){
+        InternalKey victim_smallest, victim_largest;
+        compaction_picker_->GetRange(start_level_inputs_, &victim_smallest, &victim_largest);
+        InternalKey output_smallest, output_largest;
+        compaction_picker_->GetRange(output_level_inputs_, &output_smallest, &output_largest);
+
+        CompactionInputFiles victim_level_inputs;
+        victim_level_inputs.level = start_level_;
+        CompactionInputFiles up_level_inputs;
+        up_level_inputs.level = start_level_ - 1;
+        //victim level
+        vstorage_->GetOverlappingInputs(start_level_, &output_smallest, &output_largest,
+                                 &victim_level_inputs.files, parent_index_,
+                                 &parent_index_);
+        if (compaction_picker_->AreFilesInCompaction(victim_level_inputs.files)) {
+          return false;
+        }
+        if (!victim_level_inputs.empty()) {
+          if (!compaction_picker_->ExpandInputsToCleanCut(cf_name_, vstorage_, &victim_level_inputs)) {
+            return false;
+          }
+        }
+        //up level
+        InternalKey compact_smallest, compact_largest;
+        compact_smallest = compaction_picker_->icmp()->Compare(victim_smallest, output_smallest)>0?output_smallest:victim_smallest;
+        compact_largest = compaction_picker_->icmp()->Compare(victim_largest, output_largest)>0?victim_largest:output_largest;
+        vstorage_->GetOverlappingInputs(up_level_inputs.level, &compact_smallest, &compact_largest,
+                                 &up_level_inputs.files, parent_index_,
+                                 &parent_index_);
+        if (compaction_picker_->AreFilesInCompaction(up_level_inputs.files)) {
+          return false;
+        }                 
+        if (!up_level_inputs.empty()) {
+          if (!compaction_picker_->ExpandInputsToCleanCut(cf_name_, vstorage_, &up_level_inputs)) {
+            return false;
+          }
+          compaction_inputs_.push_back(up_level_inputs);
+        }
+        compaction_inputs_.push_back(victim_level_inputs);
+        compaction_inputs_.push_back(output_level_inputs_);
+        
+    }else{
+      compaction_inputs_.push_back(start_level_inputs_);
+      if (!output_level_inputs_.empty()) {
+        compaction_inputs_.push_back(output_level_inputs_);
+      }
     }
+
 
     if (!is_l0_trivial_move_) {
       // In some edge cases we could pick a compaction that will be compacting
