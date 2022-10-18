@@ -165,6 +165,12 @@ struct FileSampledStats {
   mutable std::atomic<uint64_t> num_reads_sampled;
 };
 
+struct Hole{
+  InternalKey smallest;
+  InternalKey largest;   
+};
+
+
 struct FileMetaData {
   FileDescriptor fd;
   InternalKey smallest;            // Smallest internal key served by table
@@ -174,6 +180,8 @@ struct FileMetaData {
   Cache::Handle* table_reader_handle = nullptr;
 
   FileSampledStats stats;
+
+  std::vector<Hole> holes;
 
   // Stats for compensating deletion entries during compaction
 

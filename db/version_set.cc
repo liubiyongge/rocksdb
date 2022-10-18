@@ -907,6 +907,49 @@ class LevelIterator final : public InternalIterator {
         range_del_agg_(range_del_agg),
         pinned_iters_mgr_(nullptr),
         compaction_boundaries_(compaction_boundaries),
+        is_next_read_sequential_(false),
+        compact_down_(InternalKey()),
+        compact_up_(InternalKey()),
+        compact_range_(false){
+    // Empty level is not supported.
+    assert(flevel_ != nullptr && flevel_->num_files > 0);
+  }
+
+    // @param read_options Must outlive this iterator.
+  LevelIterator(TableCache* table_cache, const ReadOptions& read_options,
+                const FileOptions& file_options,
+                const InternalKeyComparator& icomparator,
+                const InternalKey& compact_down,
+                const InternalKey& compact_up,
+                const bool compact_range,
+                const LevelFilesBrief* flevel,
+                const std::shared_ptr<const SliceTransform>& prefix_extractor,
+                bool should_sample, HistogramImpl* file_read_hist,
+                TableReaderCaller caller, bool skip_filters, int level,
+                RangeDelAggregator* range_del_agg,
+                const std::vector<AtomicCompactionUnitBoundary>*
+                    compaction_boundaries = nullptr,
+                bool allow_unprepared_value = false)
+      : table_cache_(table_cache),
+        read_options_(read_options),
+        file_options_(file_options),
+        icomparator_(icomparator),
+        user_comparator_(icomparator.user_comparator()),
+        compact_down_(compact_down),
+        compact_up_(compact_up),
+        compact_range_(compact_range),
+        flevel_(flevel),
+        prefix_extractor_(prefix_extractor),
+        file_read_hist_(file_read_hist),
+        should_sample_(should_sample),
+        caller_(caller),
+        skip_filters_(skip_filters),
+        allow_unprepared_value_(allow_unprepared_value),
+        file_index_(flevel_->num_files),
+        level_(level),
+        range_del_agg_(range_del_agg),
+        pinned_iters_mgr_(nullptr),
+        compaction_boundaries_(compaction_boundaries),
         is_next_read_sequential_(false) {
     // Empty level is not supported.
     assert(flevel_ != nullptr && flevel_->num_files > 0);
@@ -1034,11 +1077,14 @@ class LevelIterator final : public InternalIterator {
   const UserComparatorWrapper user_comparator_;
   const LevelFilesBrief* flevel_;
   mutable FileDescriptor current_value_;
+  const InternalKey& compact_down_;
+  const InternalKey& compact_up_;
+  const bool compact_range_;  
   // `prefix_extractor_` may be non-null even for total order seek. Checking
   // this variable is not the right way to identify whether prefix iterator
   // is used.
   const std::shared_ptr<const SliceTransform>& prefix_extractor_;
-
+  int holepos_ = 0;
   HistogramImpl* file_read_hist_;
   bool should_sample_;
   TableReaderCaller caller_;
@@ -1058,7 +1104,7 @@ class LevelIterator final : public InternalIterator {
   bool is_next_read_sequential_;
 };
 
-void LevelIterator::Seek(const Slice& target) {
+void LevelIterator::Seek(const Slice& target) {//target = range_down_
   // Check whether the seek key fall under the same file
   bool need_to_reseek = true;
   if (file_iter_.iter() != nullptr && file_index_ < flevel_->num_files) {
@@ -1079,7 +1125,16 @@ void LevelIterator::Seek(const Slice& target) {
   }
 
   if (file_iter_.iter() != nullptr) {
-    file_iter_.Seek(target);
+    file_iter_.Seek(target);//must be valid
+    //adjust hole pos
+    holepos_ = 0;
+    while(holepos_ < flevel_->files[file_index_].file_metadata->holes.size()&&
+      user_comparator_.CompareWithoutTimestamp(
+               ExtractUserKey(file_iter_.key()), /*a_has_ts=*/true,
+               ExtractUserKey(flevel_->files[file_index_].file_metadata->holes[holepos_].largest.Encode()), /*b_has_ts=*/true) > 0){
+        holepos_++;
+    }
+    
     // Status::TryAgain indicates asynchronous request for retrieval of data
     // blocks has been submitted. So it should return at this point and Seek
     // should be called again to retrieve the requested block and execute the
@@ -1132,27 +1187,59 @@ void LevelIterator::SeekForPrev(const Slice& target) {
   InitFileIterator(new_file_index);
   if (file_iter_.iter() != nullptr) {
     file_iter_.SeekForPrev(target);
+    //adjust hole pos
+    holepos_ = flevel_->files[file_index_].file_metadata->holes.size() -1 ;
+    while(holepos_ >= 0 &&
+      user_comparator_.CompareWithoutTimestamp(
+               ExtractUserKey(file_iter_.key()), /*a_has_ts=*/true,
+               ExtractUserKey(flevel_->files[file_index_].file_metadata->holes[holepos_].smallest.Encode()), /*b_has_ts=*/true) < 0){
+        holepos_--;
+    }
     SkipEmptyFileBackward();
   }
   CheckMayBeOutOfLowerBound();
 }
 
 void LevelIterator::SeekToFirst() {
-  InitFileIterator(0);
-  if (file_iter_.iter() != nullptr) {
-    file_iter_.SeekToFirst();
+
+  if(compact_range_){
+    Seek(compact_down_.Encode());
+  }else{
+    InitFileIterator(0);
+    if (file_iter_.iter() != nullptr) {
+      //file_iter_.SeekToFirst();
+      file_iter_.Seek(flevel_->files[file_index_].file_metadata->smallest.Encode());
+      holepos_ = 0;
+    }
+    SkipEmptyFileForward();
+    CheckMayBeOutOfLowerBound();
   }
-  SkipEmptyFileForward();
-  CheckMayBeOutOfLowerBound();
+
 }
 
 void LevelIterator::SeekToLast() {
-  InitFileIterator(flevel_->num_files - 1);
-  if (file_iter_.iter() != nullptr) {
-    file_iter_.SeekToLast();
+  if(compact_range_){
+    SeekForPrev(compact_up_.Encode());
+    Next();
+    if(!Valid() ||  
+     user_comparator_.CompareWithoutTimestamp(
+               ExtractUserKey(file_iter_.key()), /*a_has_ts=*/true,
+               ExtractUserKey(compact_up_.Encode()), /*b_has_ts=*/true) != 0      
+    ){      
+      SeekForPrev(compact_up_.Encode());
+    }
+    
+  }else{
+    InitFileIterator(flevel_->num_files - 1);
+    if (file_iter_.iter() != nullptr) {
+      //file_iter_.SeekToLast();
+      file_iter_.SeekForPrev(flevel_->files[file_index_].file_metadata->largest.Encode());
+      holepos_ = flevel_->files[file_index_].file_metadata->holes.size() - 1;
+    }
+    SkipEmptyFileBackward();
+    CheckMayBeOutOfLowerBound();
   }
-  SkipEmptyFileBackward();
-  CheckMayBeOutOfLowerBound();
+
 }
 
 void LevelIterator::Next() {
@@ -1161,7 +1248,7 @@ void LevelIterator::Next() {
   SkipEmptyFileForward();
 }
 
-bool LevelIterator::NextAndGetResult(IterateResult* result) {
+bool LevelIterator::NextAndGetResult(IterateResult* result) {//compaction用不到
   assert(Valid());
   bool is_valid = file_iter_.NextAndGetResult(result);
   if (!is_valid) {
@@ -1188,10 +1275,31 @@ void LevelIterator::Prev() {
 }
 
 bool LevelIterator::SkipEmptyFileForward() {
+  //reach up bound
+  if(compact_range_ && file_iter_.Valid() && 
+  user_comparator_.CompareWithoutTimestamp(
+               ExtractUserKey(file_iter_.key()), /*a_has_ts=*/true,
+               ExtractUserKey(compact_up_.Encode()), /*b_has_ts=*/true) > 0){
+      SetFileIterator(nullptr);
+      return true;
+  }
+
   bool seen_empty_file = false;
+  //skip hole, 进入hole前需要保证hole pos在准确的位置。 
+  //flevel_->files[file_index_].file_metadata->holes
+  while(file_iter_.Valid() && 
+  holepos_ < flevel_->files[file_index_].file_metadata->holes.size() && 
+  icomparator_.InternalKeyComparator::Compare(file_iter_.key(), flevel_->files[file_index_].file_metadata->holes[holepos_].smallest.Encode()) >= 0){
+    file_iter_.Seek(flevel_->files[file_index_].file_metadata->holes[holepos_].largest.Encode());//
+    file_iter_.Next();          
+    holepos_++;
+  }
+
   while (file_iter_.iter() == nullptr ||
-         (!file_iter_.Valid() && file_iter_.status().ok() &&
-          file_iter_.iter()->UpperBoundCheckResult() !=
+         ((!file_iter_.Valid() || 
+         icomparator_.InternalKeyComparator::Compare(file_iter_.key(), flevel_->files[file_index_].file_metadata->largest.Encode()) > 0) && 
+         file_iter_.status().ok() &&
+        file_iter_.iter()->UpperBoundCheckResult() !=
               IterBoundCheck::kOutOfBound)) {
     seen_empty_file = true;
     // Move to next file
@@ -1206,15 +1314,39 @@ bool LevelIterator::SkipEmptyFileForward() {
     }
     InitFileIterator(file_index_ + 1);
     if (file_iter_.iter() != nullptr) {
-      file_iter_.SeekToFirst();
+      //file_iter_.SeekToFirst();
+      file_iter_.Seek(flevel_->files[file_index_].file_metadata->smallest.Encode());
     }
   }
+
   return seen_empty_file;
 }
 
 void LevelIterator::SkipEmptyFileBackward() {
+  if(compact_range_ && file_iter_.Valid() && 
+    user_comparator_.CompareWithoutTimestamp(
+               ExtractUserKey(file_iter_.key()), /*a_has_ts=*/true,
+               ExtractUserKey(compact_down_.Encode()), /*b_has_ts=*/true) < 0){
+      SetFileIterator(nullptr);
+      return;
+  }
+
+  while(file_iter_.Valid() && 
+  holepos_ >= 0 && 
+  user_comparator_.CompareWithoutTimestamp(
+              ExtractUserKey(file_iter_.key()), true,
+              ExtractUserKey(flevel_->files[file_index_].file_metadata->holes[holepos_].largest.Encode()), true) <= 0){
+    file_iter_.SeekForPrev(flevel_->files[file_index_].file_metadata->holes[holepos_].smallest.Encode());//
+    file_iter_.Prev();
+    holepos_--;
+  }
+
+
   while (file_iter_.iter() == nullptr ||
-         (!file_iter_.Valid() && file_iter_.status().ok())) {
+         ((!file_iter_.Valid() ||
+          icomparator_.InternalKeyComparator::Compare(file_iter_.key(), flevel_->files[file_index_].file_metadata->smallest.Encode()) < 0) &&
+          file_iter_.status().ok())) {
+    
     // Move to previous file
     if (file_index_ == 0) {
       // Already the first file
@@ -1223,7 +1355,8 @@ void LevelIterator::SkipEmptyFileBackward() {
     }
     InitFileIterator(file_index_ - 1);
     if (file_iter_.iter() != nullptr) {
-      file_iter_.SeekToLast();
+      //file_iter_.SeekToLast();
+      file_iter_.SeekForPrev(flevel_->files[file_index_].file_metadata->largest.Encode());
     }
   }
 }
@@ -1265,6 +1398,7 @@ void LevelIterator::InitFileIterator(size_t new_file_index) {
       file_index_ = new_file_index;
       InternalIterator* iter = NewFileIterator();
       SetFileIterator(iter);
+      holepos_ = 0;
     }
   }
 }
@@ -5959,7 +6093,8 @@ InternalIterator* VersionSet::MakeInputIterator(
         // Create concatenating iterator for the files from this level
         list[num++] = new LevelIterator(
             cfd->table_cache(), read_options, file_options_compactions,
-            cfd->internal_comparator(), c->input_levels(which),
+            cfd->internal_comparator(), c->compact_down_, c->compact_up_,
+            c->compact_range_, c->input_levels(which),
             c->mutable_cf_options()->prefix_extractor,
             /*should_sample=*/false,
             /*no per level latency histogram=*/nullptr,

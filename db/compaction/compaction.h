@@ -87,6 +87,26 @@ class Compaction {
                  BlobGarbageCollectionPolicy::kUseDefault,
              double blob_garbage_collection_age_cutoff = -1);
 
+    Compaction(VersionStorageInfo* input_version,
+             const ImmutableOptions& immutable_options,
+             const MutableCFOptions& mutable_cf_options,
+             const MutableDBOptions& mutable_db_options,
+             InternalKey compact_down, InternalKey compact_up,
+             bool compact_range,
+             std::vector<CompactionInputFiles> inputs, int output_level,
+             uint64_t target_file_size, uint64_t max_compaction_bytes,
+             uint32_t output_path_id, CompressionType compression,
+             CompressionOptions compression_opts,
+             Temperature output_temperature, uint32_t max_subcompactions,
+             std::vector<FileMetaData*> grandparents,
+             bool manual_compaction = false, const std::string& trim_ts = "",
+             double score = -1, bool deletion_compaction = false,
+             bool l0_files_might_overlap = true,
+             CompactionReason compaction_reason = CompactionReason::kUnknown,
+             BlobGarbageCollectionPolicy blob_garbage_collection_policy =
+                 BlobGarbageCollectionPolicy::kUseDefault,
+             double blob_garbage_collection_age_cutoff = -1);
+  
   // No copying allowed
   Compaction(const Compaction&) = delete;
   void operator=(const Compaction&) = delete;
@@ -366,6 +386,9 @@ class Compaction {
                                       const int start_level,
                                       const int output_level);
 
+  InternalKey compact_down_;
+  InternalKey compact_up_;
+  bool compact_range_ = false;
  private:
   // mark (or clear) all files that are being compacted
   void MarkFilesBeingCompacted(bool mark_as_compacted);

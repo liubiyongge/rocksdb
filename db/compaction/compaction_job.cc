@@ -248,7 +248,6 @@ void CompactionJob::Prepare() {
   } else {
     constexpr Slice* start = nullptr;
     constexpr Slice* end = nullptr;
-
     compact_->sub_compact_states.emplace_back(c, start, end, /*sub_job_id*/ 0);
   }
 }
