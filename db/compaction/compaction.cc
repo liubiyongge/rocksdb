@@ -575,6 +575,7 @@ void Compaction::AddInputDeletions(VersionEdit* out_edit) {
             }
           }
           inputs_[which][i]->holes.erase(iteri, std::end(inputs_[which][i]->holes));
+          smallestLables.erase(inputs_[which][i]->fd.GetNumber());
         }else if(up > 0 && down>= 0){
           inputs_[which][i]->smallest = largestLables[inputs_[which][i]->fd.GetNumber()];
           auto iteri = inputs_[which][i]->holes.begin();
@@ -584,6 +585,7 @@ void Compaction::AddInputDeletions(VersionEdit* out_edit) {
             }
           }
           inputs_[which][i]->holes.erase(std::begin(inputs_[which][i]->holes), iteri);
+          largestLables.erase(inputs_[which][i]->fd.GetNumber());
         }else{
           Hole newhole = {smallestLables[inputs_[which][i]->fd.GetNumber()], largestLables[inputs_[which][i]->fd.GetNumber()]};
           int indiclow = -1;
@@ -609,7 +611,8 @@ void Compaction::AddInputDeletions(VersionEdit* out_edit) {
             inputs_[which][i]->holes.erase(inputs_[which][i]->holes.begin() + indiclow, inputs_[which][i]->holes.begin() + indichigh);
             inputs_[which][i]->holes.insert(inputs_[which][i]->holes.begin() + indiclow, newhole);
           }
-
+          smallestLables.erase(inputs_[which][i]->fd.GetNumber());
+          largestLables.erase(inputs_[which][i]->fd.GetNumber());
         }
       }else{
         out_edit->DeleteFile(level(which), inputs_[which][i]->fd.GetNumber());
