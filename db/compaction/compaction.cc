@@ -17,6 +17,7 @@
 #include "rocksdb/sst_partitioner.h"
 #include "test_util/sync_point.h"
 #include "util/string_util.h"
+#include "db/lbymacro.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -554,10 +555,70 @@ bool Compaction::IsTrivialMove() const {
 }
 
 void Compaction::AddInputDeletions(VersionEdit* out_edit) {
-  for (size_t which = 0; which < num_input_levels(); which++) {
+  for (size_t which = 0; which < num_input_levels() - 1; which++) {
     for (size_t i = 0; i < inputs_[which].size(); i++) {
-      out_edit->DeleteFile(level(which), inputs_[which][i]->fd.GetNumber());
+      if(compact_range_){
+        int up = cfd_->user_comparator()->CompareWithoutTimestamp(
+               ExtractUserKey(inputs_[which][i]->largest.Encode()), /*a_has_ts=*/true,
+               ExtractUserKey(compact_up_.Encode()), /*b_has_ts=*/true);
+        int down = cfd_->user_comparator()->CompareWithoutTimestamp(
+               ExtractUserKey(inputs_[which][i]->smallest.Encode()), /*a_has_ts=*/true,
+               ExtractUserKey(compact_down_.Encode()), /*b_has_ts=*/true);
+        if(up <= 0 && down>= 0){
+          out_edit->DeleteFile(level(which), inputs_[which][i]->fd.GetNumber()); 
+        }else if(up <= 0 && down < 0){
+          inputs_[which][i]->largest = smallestLables[inputs_[which][i]->fd.GetNumber()];
+          auto iteri = inputs_[which][i]->holes.begin();
+          for(; iteri++ != inputs_[which][i]->holes.end(); iteri++){
+            if(cfd_->internal_comparator().Compare(inputs_[which][i]->largest, iteri->largest) < 0){
+              break;
+            }
+          }
+          inputs_[which][i]->holes.erase(iteri, std::end(inputs_[which][i]->holes));
+        }else if(up > 0 && down>= 0){
+          inputs_[which][i]->smallest = largestLables[inputs_[which][i]->fd.GetNumber()];
+          auto iteri = inputs_[which][i]->holes.begin();
+          for(; iteri++ != inputs_[which][i]->holes.end(); iteri++){
+            if(cfd_->internal_comparator().Compare(inputs_[which][i]->largest, iteri->largest) < 0){
+              break;
+            }
+          }
+          inputs_[which][i]->holes.erase(std::begin(inputs_[which][i]->holes), iteri);
+        }else{
+          Hole newhole = {smallestLables[inputs_[which][i]->fd.GetNumber()], largestLables[inputs_[which][i]->fd.GetNumber()]};
+          int indiclow = -1;
+          int indichigh = -1;
+          int indic = 0;
+          for(;indic < inputs_[which][i]->holes.size(); indic++){
+            if(cfd_->internal_comparator().Compare(smallestLables[inputs_[which][i]->fd.GetNumber()], inputs_[which][i]->holes[indic].largest) < 0 &&
+               cfd_->internal_comparator().Compare(largestLables[inputs_[which][i]->fd.GetNumber()], inputs_[which][i]->holes[indic].largest) >= 0
+            ){
+              if(indiclow == -1){
+                indiclow = indic;
+                indichigh = indiclow + 1;
+              }else{
+                indichigh++;
+              }
+            }else if(cfd_->internal_comparator().Compare(largestLables[inputs_[which][i]->fd.GetNumber()], inputs_[which][i]->holes[indic].largest) < 0){
+              break;
+            }
+          }
+          if(indiclow == -1){
+            inputs_[which][i]->holes.insert(inputs_[which][i]->holes.begin() + indic, newhole);
+          }else{
+            inputs_[which][i]->holes.erase(inputs_[which][i]->holes.begin() + indiclow, inputs_[which][i]->holes.begin() + indichigh);
+            inputs_[which][i]->holes.insert(inputs_[which][i]->holes.begin() + indiclow, newhole);
+          }
+
+        }
+      }else{
+        out_edit->DeleteFile(level(which), inputs_[which][i]->fd.GetNumber());
+      }
     }
+  }
+  size_t which = num_input_levels() - 1;
+  for (size_t i = 0; i < inputs_[which].size(); i++) {
+    out_edit->DeleteFile(level(which), inputs_[which][i]->fd.GetNumber());
   }
 }
 
