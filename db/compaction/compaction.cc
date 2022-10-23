@@ -17,8 +17,9 @@
 #include "rocksdb/sst_partitioner.h"
 #include "test_util/sync_point.h"
 #include "util/string_util.h"
-#include "db/lbymacro.h"
 
+extern std::unordered_map<uint64_t, rocksdb::InternalKey> smallestLables;
+extern std::unordered_map<uint64_t, rocksdb::InternalKey> largestLables;
 namespace ROCKSDB_NAMESPACE {
 
 const uint64_t kRangeTombstoneSentinel =
@@ -591,7 +592,7 @@ void Compaction::AddInputDeletions(VersionEdit* out_edit) {
           int indiclow = -1;
           int indichigh = -1;
           int indic = 0;
-          for(;indic < inputs_[which][i]->holes.size(); indic++){
+          for(;indic < (int)inputs_[which][i]->holes.size(); indic++){
             if(cfd_->internal_comparator().Compare(smallestLables[inputs_[which][i]->fd.GetNumber()], inputs_[which][i]->holes[indic].largest) < 0 &&
                cfd_->internal_comparator().Compare(largestLables[inputs_[which][i]->fd.GetNumber()], inputs_[which][i]->holes[indic].largest) >= 0
             ){

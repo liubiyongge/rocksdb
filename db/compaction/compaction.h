@@ -386,9 +386,7 @@ class Compaction {
                                       const int start_level,
                                       const int output_level);
 
-  InternalKey compact_down_;
-  InternalKey compact_up_;
-  bool compact_range_ = false;
+
  private:
   // mark (or clear) all files that are being compacted
   void MarkFilesBeingCompacted(bool mark_as_compacted);
@@ -427,9 +425,9 @@ class Compaction {
                                const std::vector<CompactionInputFiles>& inputs);
 
   VersionStorageInfo* input_vstorage_;
-
   const int start_level_;   // the lowest level to be compacted
   const int output_level_;  // levels to which output files are stored
+
   uint64_t max_output_file_size_;
   uint64_t max_compaction_bytes_;
   uint32_t max_subcompactions_;
@@ -496,6 +494,11 @@ class Compaction {
   // Reason for compaction
   CompactionReason compaction_reason_;
 
+public:  
+  InternalKey compact_down_;
+  InternalKey compact_up_;
+  bool compact_range_ = false;
+private:
   // Notify on compaction completion only if listener was notified on compaction
   // begin.
   bool notify_on_compaction_completion_;

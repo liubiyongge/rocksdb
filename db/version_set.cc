@@ -72,7 +72,6 @@
 #include "util/stop_watch.h"
 #include "util/string_util.h"
 #include "util/user_comparator_wrapper.h"
-#include "lbymacro.h"
 // Generate the regular and coroutine versions of some methods by
 // including version_set_sync_and_async.h twice
 // Macros in the header will expand differently based on whether
@@ -85,6 +84,9 @@
 #include "db/version_set_sync_and_async.h"
 #undef WITH_COROUTINES
 // clang-format on
+
+std::unordered_map<uint64_t, rocksdb::InternalKey> smallestLables;
+std::unordered_map<uint64_t, rocksdb::InternalKey> largestLables;
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -895,6 +897,7 @@ class LevelIterator final : public InternalIterator {
         file_options_(file_options),
         icomparator_(icomparator),
         user_comparator_(icomparator.user_comparator()),
+        compact_range_(false),
         flevel_(flevel),
         prefix_extractor_(prefix_extractor),
         file_read_hist_(file_read_hist),
@@ -907,10 +910,7 @@ class LevelIterator final : public InternalIterator {
         range_del_agg_(range_del_agg),
         pinned_iters_mgr_(nullptr),
         compaction_boundaries_(compaction_boundaries),
-        is_next_read_sequential_(false),
-        compact_down_(InternalKey()),
-        compact_up_(InternalKey()),
-        compact_range_(false){
+        is_next_read_sequential_(false){
     // Empty level is not supported.
     assert(flevel_ != nullptr && flevel_->num_files > 0);
   }
@@ -919,8 +919,8 @@ class LevelIterator final : public InternalIterator {
   LevelIterator(TableCache* table_cache, const ReadOptions& read_options,
                 const FileOptions& file_options,
                 const InternalKeyComparator& icomparator,
-                const InternalKey& compact_down,
-                const InternalKey& compact_up,
+                const InternalKey compact_down,
+                const InternalKey compact_up,
                 const bool compact_range,
                 const LevelFilesBrief* flevel,
                 const std::shared_ptr<const SliceTransform>& prefix_extractor,
@@ -1075,11 +1075,12 @@ class LevelIterator final : public InternalIterator {
   const FileOptions& file_options_;
   const InternalKeyComparator& icomparator_;
   const UserComparatorWrapper user_comparator_;
+  const InternalKey compact_down_;
+  const InternalKey compact_up_;
+  const bool compact_range_;  
   const LevelFilesBrief* flevel_;
   mutable FileDescriptor current_value_;
-  const InternalKey& compact_down_;
-  const InternalKey& compact_up_;
-  const bool compact_range_;  
+
   // `prefix_extractor_` may be non-null even for total order seek. Checking
   // this variable is not the right way to identify whether prefix iterator
   // is used.
@@ -1128,7 +1129,7 @@ void LevelIterator::Seek(const Slice& target) {//target = range_down_
     file_iter_.Seek(target);//must be valid
     //adjust hole pos
     holepos_ = 0;
-    while(holepos_ < flevel_->files[file_index_].file_metadata->holes.size()&&
+    while(holepos_ < (int)flevel_->files[file_index_].file_metadata->holes.size()&&
       icomparator_.InternalKeyComparator::Compare(
         file_iter_.key(), 
         flevel_->files[file_index_].file_metadata->holes[holepos_].largest.Encode()) >= 0){
@@ -1334,7 +1335,7 @@ bool LevelIterator::SkipEmptyFileForward() {
                ExtractUserKey(file_iter_.key()), /*a_has_ts=*/true,
                ExtractUserKey(compact_up_.Encode()), /*b_has_ts=*/true) > 0){//非Valid了，超出了一一边的边界
     InternalKey tmp;
-    if(holepos_ < flevel_->files[file_index_].file_metadata->holes.size() && 
+    if(holepos_ < (int)flevel_->files[file_index_].file_metadata->holes.size() && 
       icomparator_.InternalKeyComparator::Compare(
         file_iter_.key(),
         flevel_->files[file_index_].file_metadata->holes[holepos_].largest.Encode()
@@ -1358,7 +1359,7 @@ bool LevelIterator::SkipEmptyFileForward() {
   //skip hole, 进入hole前需要保证hole pos在准确的位置。 
   //flevel_->files[file_index_].file_metadata->holes
   while(file_iter_.Valid() && 
-  holepos_ < flevel_->files[file_index_].file_metadata->holes.size() && 
+  holepos_ < (int)flevel_->files[file_index_].file_metadata->holes.size() && 
   icomparator_.InternalKeyComparator::Compare(file_iter_.key(), flevel_->files[file_index_].file_metadata->holes[holepos_].smallest.Encode()) > 0){
     file_iter_.Seek(flevel_->files[file_index_].file_metadata->holes[holepos_].largest.Encode());         
     holepos_++;

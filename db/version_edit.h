@@ -173,6 +173,7 @@ struct Hole{
 
 struct FileMetaData {
   FileDescriptor fd;
+  std::vector<Hole> holes;
   InternalKey smallest;            // Smallest internal key served by table
   InternalKey largest;             // Largest internal key served by table
 
@@ -181,7 +182,7 @@ struct FileMetaData {
 
   FileSampledStats stats;
 
-  std::vector<Hole> holes;
+  
 
   // Stats for compensating deletion entries during compaction
 
