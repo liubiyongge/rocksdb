@@ -36,7 +36,9 @@
 #include <queue>
 #include <thread>
 #include <unordered_map>
-
+#include <spdlog/spdlog.h>
+#include<spdlog/async.h>
+#include<spdlog/sinks/basic_file_sink.h>
 #include "cache/clock_cache.h"
 #include "cache/fast_lru_cache.h"
 #include "db/db_impl/db_impl.h"
@@ -3280,6 +3282,7 @@ class Benchmark {
   }
 
   void Run() {
+
     if (!SanityCheck()) {
       ErrorExit();
     }
@@ -8388,6 +8391,10 @@ class Benchmark {
 };
 
 int db_bench_tool(int argc, char** argv) {
+  auto new_logger = spdlog::basic_logger_mt("new_default_logger", "/tmp/new-default-log.txt", true);
+  new_logger->set_pattern("%@  %v");
+  spdlog::set_default_logger(new_logger);
+
   ROCKSDB_NAMESPACE::port::InstallStackTraceHandler();
   ConfigOptions config_options;
   static bool initialized = false;

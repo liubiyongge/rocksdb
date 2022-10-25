@@ -1202,36 +1202,65 @@ void LevelIterator::SeekForPrev(const Slice& target) {
 }
 
 void LevelIterator::SeekToFirst() {
+  InitFileIterator(0);
+  if(compact_range_ && user_comparator_.CompareWithoutTimestamp(
+               ExtractUserKey(compact_down_.Encode()), /*a_has_ts=*/true,
+               ExtractUserKey(flevel_->files[file_index_].file_metadata->smallest.Encode()), /*b_has_ts=*/true) > 0){
+        
+        Seek(compact_down_.Encode());//如果compact_down_ smaller than smallest , point to a key smaller than smallest
+        if(user_comparator_.CompareWithoutTimestamp(
+              ExtractUserKey(file_iter_.key()), /*a_has_ts=*/true,
+              ExtractUserKey(compact_up_.Encode()), /*b_has_ts=*/true) > 0){
+              SetFileIterator(nullptr);
+              return;
+        }
 
-  if(compact_range_){
-    Seek(compact_down_.Encode());
-    if(icomparator_.InternalKeyComparator::Compare(
-      file_iter_.key(),
-      flevel_->files[file_index_].file_metadata->smallest.Encode()) != 0){
-      file_iter_.Prev();
-      
-      InternalKey tmp;
-      if(holepos_ > 0 && 
-      icomparator_.InternalKeyComparator::Compare(
-        file_iter_.key(),
-        flevel_->files[file_index_].file_metadata->holes[holepos_-1].largest.Encode()
-      ) < 0 && 
-      icomparator_.InternalKeyComparator::Compare(
-        file_iter_.key(),
-        flevel_->files[file_index_].file_metadata->holes[holepos_-1].smallest.Encode()
-      ) > 0
-      ){
-        tmp = flevel_->files[file_index_].file_metadata->holes[holepos_-1].smallest;
-      }else{
-        tmp.DecodeFrom(file_iter_.key());
-      }
-      smallestLables[flevel_->files[file_index_].file_metadata->fd.GetNumber()] = tmp;
-      
-      file_iter_.Next();
-    }
+        file_iter_.Prev();
+        //处理存在相同的user_key，而没有指向在这个user_key后面的internalkey的情况
+        if(user_comparator_.CompareWithoutTimestamp(
+               ExtractUserKey(file_iter_.key()), /*a_has_ts=*/true,
+               ExtractUserKey(compact_up_.Encode()), /*b_has_ts=*/true) != 0 ||
+               (holepos_ > 0 && 
+          icomparator_.InternalKeyComparator::Compare(
+            file_iter_.key(),
+            flevel_->files[file_index_].file_metadata->holes[holepos_-1].largest.Encode()
+          ) < 0 && 
+          icomparator_.InternalKeyComparator::Compare(
+            file_iter_.key(),
+            flevel_->files[file_index_].file_metadata->holes[holepos_-1].smallest.Encode()
+          ) > 0)){
+
+        }else{
+            if(holepos_ > 0 && icomparator_.InternalKeyComparator::Compare(
+              file_iter_.key(),
+              flevel_->files[file_index_].file_metadata->holes[holepos_-1].smallest.Encode()) == 0){
+                holepos_--;
+            }
+            file_iter_.Prev();
+        }
+
+        InternalKey tmp;
+            if(holepos_ > 0 && 
+            icomparator_.InternalKeyComparator::Compare(
+              file_iter_.key(),
+              flevel_->files[file_index_].file_metadata->holes[holepos_-1].largest.Encode()
+            ) < 0 && 
+            icomparator_.InternalKeyComparator::Compare(
+              file_iter_.key(),
+              flevel_->files[file_index_].file_metadata->holes[holepos_-1].smallest.Encode()
+            ) > 0
+            ){
+              tmp = flevel_->files[file_index_].file_metadata->holes[holepos_-1].smallest;
+            }else{
+              tmp.DecodeFrom(file_iter_.key());
+            }
+            smallestLables[flevel_->files[file_index_].file_metadata->fd.GetNumber()] = tmp;
+            
+            file_iter_.Next();
+
+
     
-  }else{
-    InitFileIterator(0);
+    }else{
     if (file_iter_.iter() != nullptr) {
       //file_iter_.SeekToFirst();
       file_iter_.Seek(flevel_->files[file_index_].file_metadata->smallest.Encode());
@@ -1245,6 +1274,7 @@ void LevelIterator::SeekToFirst() {
 
 void LevelIterator::SeekToLast() {
    if(compact_range_){
+    InitFileIterator(flevel_->num_files - 1);
     SeekForPrev(compact_up_.Encode());
     // if(file_index_ != flevel_->num_files - 1){//假设Compaction不会调用SeekToLast以及Prev
 
@@ -1302,10 +1332,23 @@ void LevelIterator::Next() {
   SkipEmptyFileForward();
 }
 
-bool LevelIterator::NextAndGetResult(IterateResult* result) {//compaction用不到
+bool LevelIterator::NextAndGetResult(IterateResult* result) {
   assert(Valid());
   bool is_valid = file_iter_.NextAndGetResult(result);
-  if (!is_valid) {
+
+  //skip hole
+  while(is_valid && 
+  holepos_ < (int)flevel_->files[file_index_].file_metadata->holes.size() && 
+  icomparator_.InternalKeyComparator::Compare(file_iter_.key(), flevel_->files[file_index_].file_metadata->holes[holepos_].smallest.Encode()) > 0){
+    file_iter_.Seek(flevel_->files[file_index_].file_metadata->holes[holepos_].largest.Encode());
+    result->key = file_iter_.key();
+    result->bound_check_result = file_iter_.UpperBoundCheckResult();
+    result->value_prepared = file_iter_.IsValuePrepared();        
+    holepos_++;
+  }
+
+
+  if (!is_valid || icomparator_.InternalKeyComparator::Compare(file_iter_.key(), flevel_->files[file_index_].file_metadata->largest.Encode()) > 0) {
     is_next_read_sequential_ = true;
     SkipEmptyFileForward();
     is_next_read_sequential_ = false;
@@ -1319,18 +1362,9 @@ bool LevelIterator::NextAndGetResult(IterateResult* result) {//compaction用不�
       result->value_prepared = !allow_unprepared_value_;
     }
   }
-  return is_valid;
-}
 
-void LevelIterator::Prev() {
-  assert(Valid());
-  file_iter_.Prev();
-  SkipEmptyFileBackward();
-}
-
-bool LevelIterator::SkipEmptyFileForward() {
   //reach up bound
-  if(compact_range_ && file_iter_.Valid() && 
+  if(compact_range_ && is_valid  && 
   user_comparator_.CompareWithoutTimestamp(
                ExtractUserKey(file_iter_.key()), /*a_has_ts=*/true,
                ExtractUserKey(compact_up_.Encode()), /*b_has_ts=*/true) > 0){//非Valid了，超出了一一边的边界
@@ -1351,19 +1385,53 @@ bool LevelIterator::SkipEmptyFileForward() {
         tmp.DecodeFrom(file_iter_.key());
       }
     largestLables[flevel_->files[file_index_].file_metadata->fd.GetNumber()] = tmp;
-    SetFileIterator(nullptr);
-    return true;
+    return false;
   }
+  return is_valid;
+}
+
+void LevelIterator::Prev() {
+  assert(Valid());
+  file_iter_.Prev();
+  SkipEmptyFileBackward();
+}
+
+bool LevelIterator::SkipEmptyFileForward() {
+  //reach up bound
+  // if(compact_range_ && file_iter_.Valid() && 
+  // user_comparator_.CompareWithoutTimestamp(
+  //              ExtractUserKey(file_iter_.key()), /*a_has_ts=*/true,
+  //              ExtractUserKey(compact_up_.Encode()), /*b_has_ts=*/true) > 0){//非Valid了，超出了一一边的边界
+  //   InternalKey tmp;
+  //   if(holepos_ < (int)flevel_->files[file_index_].file_metadata->holes.size() && 
+  //     icomparator_.InternalKeyComparator::Compare(
+  //       file_iter_.key(),
+  //       flevel_->files[file_index_].file_metadata->holes[holepos_].largest.Encode()
+  //     ) < 0 && 
+  //     icomparator_.InternalKeyComparator::Compare(
+  //       file_iter_.key(),
+  //       flevel_->files[file_index_].file_metadata->holes[holepos_].smallest.Encode()
+  //     ) > 0
+  //     ){
+        
+  //       tmp = flevel_->files[file_index_].file_metadata->holes[holepos_].largest;
+  //     }else{
+  //       tmp.DecodeFrom(file_iter_.key());
+  //     }
+  //   largestLables[flevel_->files[file_index_].file_metadata->fd.GetNumber()] = tmp;
+  //   SetFileIterator(nullptr);
+  //   return true;
+  // }
 
   bool seen_empty_file = false;
   //skip hole, 进入hole前需要保证hole pos在准确的位置。 
   //flevel_->files[file_index_].file_metadata->holes
-  while(file_iter_.Valid() && 
-  holepos_ < (int)flevel_->files[file_index_].file_metadata->holes.size() && 
-  icomparator_.InternalKeyComparator::Compare(file_iter_.key(), flevel_->files[file_index_].file_metadata->holes[holepos_].smallest.Encode()) > 0){
-    file_iter_.Seek(flevel_->files[file_index_].file_metadata->holes[holepos_].largest.Encode());         
-    holepos_++;
-  }
+  // while(file_iter_.Valid() && 
+  // holepos_ < (int)flevel_->files[file_index_].file_metadata->holes.size() && 
+  // icomparator_.InternalKeyComparator::Compare(file_iter_.key(), flevel_->files[file_index_].file_metadata->holes[holepos_].smallest.Encode()) > 0){
+  //   file_iter_.Seek(flevel_->files[file_index_].file_metadata->holes[holepos_].largest.Encode());         
+  //   holepos_++;
+  // }
 
   while (file_iter_.iter() == nullptr ||
          ((!file_iter_.Valid() || 
@@ -1386,6 +1454,7 @@ bool LevelIterator::SkipEmptyFileForward() {
     if (file_iter_.iter() != nullptr) {
       //file_iter_.SeekToFirst();
       file_iter_.Seek(flevel_->files[file_index_].file_metadata->smallest.Encode());
+      holepos_ = 0;
     }
   }
 

@@ -9,7 +9,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #pragma once
-
+#include <spdlog/spdlog.h>
 #include "db/blob/blob_file_addition.h"
 #include "db/blob/blob_garbage_meter.h"
 #include "db/compaction/compaction.h"
@@ -188,8 +188,12 @@ class SubcompactionState {
     for (const auto& file : penultimate_level_outputs_.outputs_) {
       out_edit->AddFile(compaction->GetPenultimateLevel(), file.meta);
     }
+    if(compaction->compact_range_){
+    SPDLOG_INFO("range {} {}", compaction->compact_down_.DebugString(true), compaction->compact_up_.DebugString(true));
+    }
     for (const auto& file : compaction_outputs_.outputs_) {
       out_edit->AddFile(compaction->output_level(), file.meta);
+      SPDLOG_INFO("com {} {} {} {}", compaction->output_level(), file.meta.fd.GetNumber(), file.meta.smallest.DebugString(true), file.meta.largest.DebugString(true));
     }
   }
 
