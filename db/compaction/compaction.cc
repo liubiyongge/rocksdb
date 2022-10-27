@@ -567,10 +567,10 @@ void Compaction::AddInputDeletions(VersionEdit* out_edit) {
                ExtractUserKey(inputs_[which][i]->smallest.Encode()), /*a_has_ts=*/true,
                ExtractUserKey(compact_down_.Encode()), /*b_has_ts=*/true);
         if(up <= 0 && down>= 0){
-          SPDLOG_INFO("{} hole size {} delete {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->holes.size(), inputs_[which][i]->smallest.DebugString(true), inputs_[which][i]->largest.DebugString(true));
+          SPDLOG_INFO("de {} {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->smallest.DebugString(true), inputs_[which][i]->largest.DebugString(true), inputs_[which][i]->holes.size());
           out_edit->DeleteFile(level(which), inputs_[which][i]->fd.GetNumber()); 
         }else if(up <= 0 && down < 0){
-          SPDLOG_INFO("{} la change {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->largest.DebugString(true), smallestLables[inputs_[which][i]->fd.GetNumber()].DebugString(true));
+          SPDLOG_INFO("la {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->largest.DebugString(true), smallestLables[inputs_[which][i]->fd.GetNumber()].DebugString(true));
           inputs_[which][i]->largest = smallestLables[inputs_[which][i]->fd.GetNumber()];
           auto iteri = inputs_[which][i]->holes.begin();
           for(; iteri != inputs_[which][i]->holes.end(); iteri++){
@@ -581,7 +581,7 @@ void Compaction::AddInputDeletions(VersionEdit* out_edit) {
           inputs_[which][i]->holes.erase(iteri, std::end(inputs_[which][i]->holes));
           smallestLables.erase(inputs_[which][i]->fd.GetNumber());
         }else if(up > 0 && down>= 0){
-          SPDLOG_INFO("{} sm change {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->smallest.DebugString(true), largestLables[inputs_[which][i]->fd.GetNumber()].DebugString(true));
+          SPDLOG_INFO("sm {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->smallest.DebugString(true), largestLables[inputs_[which][i]->fd.GetNumber()].DebugString(true));
           inputs_[which][i]->smallest = largestLables[inputs_[which][i]->fd.GetNumber()];
           auto iteri = inputs_[which][i]->holes.begin();
           for(; iteri != inputs_[which][i]->holes.end(); iteri++){
@@ -619,19 +619,19 @@ void Compaction::AddInputDeletions(VersionEdit* out_edit) {
             inputs_[which][i]->holes.erase(inputs_[which][i]->holes.begin() + indiclow, inputs_[which][i]->holes.begin() + indichigh);
             inputs_[which][i]->holes.insert(inputs_[which][i]->holes.begin() + indiclow, newhole);
           }
-          SPDLOG_INFO("{} add hole {} {}", inputs_[which][i]->fd.GetNumber(), newhole.smallest.DebugString(true), newhole.largest.DebugString(true)); 
+          SPDLOG_INFO("ho {} {} {}", inputs_[which][i]->fd.GetNumber(), newhole.smallest.DebugString(true), newhole.largest.DebugString(true)); 
           smallestLables.erase(inputs_[which][i]->fd.GetNumber());
           largestLables.erase(inputs_[which][i]->fd.GetNumber());
         }
       }else{
-        SPDLOG_INFO("{} hole size {} delete {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->holes.size(), inputs_[which][i]->smallest.DebugString(true), inputs_[which][i]->largest.DebugString(true));
+        SPDLOG_INFO("de {} {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->smallest.DebugString(true), inputs_[which][i]->largest.DebugString(true), inputs_[which][i]->holes.size());
         out_edit->DeleteFile(level(which), inputs_[which][i]->fd.GetNumber());
       }
     }
   }
   size_t which = num_input_levels() - 1;
   for (size_t i = 0; i < inputs_[which].size(); i++) {
-    SPDLOG_INFO("{} hole size {} delete {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->holes.size(), inputs_[which][i]->smallest.DebugString(true), inputs_[which][i]->largest.DebugString(true));
+    SPDLOG_INFO("de {} {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->smallest.DebugString(true), inputs_[which][i]->largest.DebugString(true), inputs_[which][i]->holes.size());
     out_edit->DeleteFile(level(which), inputs_[which][i]->fd.GetNumber());
   }
 }

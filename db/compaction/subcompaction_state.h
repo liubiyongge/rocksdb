@@ -193,7 +193,7 @@ class SubcompactionState {
     }
     for (const auto& file : compaction_outputs_.outputs_) {
       out_edit->AddFile(compaction->output_level(), file.meta);
-      SPDLOG_INFO("com {} {} {} {}", compaction->output_level(), file.meta.fd.GetNumber(), file.meta.smallest.DebugString(true), file.meta.largest.DebugString(true));
+      SPDLOG_INFO("ad {} {} {} {}", file.meta.fd.GetNumber(), file.meta.smallest.DebugString(true), file.meta.largest.DebugString(true), compaction->output_level());
     }
   }
 
