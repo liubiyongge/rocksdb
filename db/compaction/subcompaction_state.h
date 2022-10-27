@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <spdlog/spdlog.h>
 #include "db/blob/blob_file_addition.h"
 #include "db/blob/blob_garbage_meter.h"
 #include "db/compaction/compaction.h"
@@ -189,6 +190,7 @@ class SubcompactionState {
       out_edit->AddFile(compaction->GetPenultimateLevel(), file.meta);
     }
     for (const auto& file : compaction_outputs_.outputs_) {
+      SPDLOG_INFO("ad {} {} {} {}", file.meta.fd.GetNumber(), file.meta.smallest.DebugString(true), file.meta.largest.DebugString(true), compaction->output_level());
       out_edit->AddFile(compaction->output_level(), file.meta);
     }
   }

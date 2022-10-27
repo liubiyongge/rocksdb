@@ -8,6 +8,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #include <cinttypes>
 #include <deque>
+#include <spdlog/spdlog.h>
 
 #include "db/builder.h"
 #include "db/db_impl/db_impl.h"
@@ -3298,7 +3299,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
             f->oldest_blob_file_number, f->oldest_ancester_time,
             f->file_creation_time, f->file_checksum, f->file_checksum_func_name,
             f->min_timestamp, f->max_timestamp, f->unique_id);
-
+        SPDLOG_INFO("mv {}", f->fd.GetNumber());
         ROCKS_LOG_BUFFER(
             log_buffer,
             "[%s] Moving #%" PRIu64 " to level-%d %" PRIu64 " bytes\n",

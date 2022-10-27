@@ -11,6 +11,7 @@
 
 #include <cinttypes>
 #include <vector>
+#include <spdlog/spdlog.h>
 
 #include "db/column_family.h"
 #include "rocksdb/compaction_filter.h"
@@ -446,6 +447,7 @@ bool Compaction::IsTrivialMove() const {
 void Compaction::AddInputDeletions(VersionEdit* out_edit) {
   for (size_t which = 0; which < num_input_levels(); which++) {
     for (size_t i = 0; i < inputs_[which].size(); i++) {
+      SPDLOG_INFO("de {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->smallest.DebugString(true), inputs_[which][i]->largest.DebugString(true));  
       out_edit->DeleteFile(level(which), inputs_[which][i]->fd.GetNumber());
     }
   }
