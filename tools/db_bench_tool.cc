@@ -3386,7 +3386,7 @@ class Benchmark {
         entries_per_batch_ = 1000;
         method = &Benchmark::WriteSeq;
       } else if (name == "fillrandom") {
-        fresh_db = true;
+        fresh_db = false;
         method = &Benchmark::WriteRandom;
       } else if (name == "filluniquerandom" ||
                  name == "fillanddeleteuniquerandom") {
