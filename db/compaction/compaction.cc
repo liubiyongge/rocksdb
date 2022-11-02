@@ -447,7 +447,7 @@ bool Compaction::IsTrivialMove() const {
 void Compaction::AddInputDeletions(VersionEdit* out_edit) {
   for (size_t which = 0; which < num_input_levels(); which++) {
     for (size_t i = 0; i < inputs_[which].size(); i++) {
-      SPDLOG_INFO("de {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->smallest.DebugString(true), inputs_[which][i]->largest.DebugString(true));  
+      SPDLOG_INFO("de {} {} {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->smallest.DebugString(true), inputs_[which][i]->largest.DebugString(true), inputs_[which].level);
       out_edit->DeleteFile(level(which), inputs_[which][i]->fd.GetNumber());
     }
   }
