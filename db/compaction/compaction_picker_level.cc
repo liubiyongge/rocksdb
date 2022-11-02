@@ -297,25 +297,12 @@ bool LevelCompactionBuilder::SetupOtherInputsIfNeeded() {
     if(!output_level_inputs_.empty() && start_level_inputs_.level > 1){
         InternalKey victim_smallest, victim_largest;
         compaction_picker_->GetRange(start_level_inputs_, &victim_smallest, &victim_largest);
-        InternalKey output_smallest, output_largest;
-        compaction_picker_->GetRange(output_level_inputs_, &output_smallest, &output_largest);
-        compact_down_  = compaction_picker_->icmp()->Compare(victim_smallest, output_smallest)>0?output_smallest:victim_smallest;
-        compact_up_ = compaction_picker_->icmp()->Compare(victim_largest, output_largest)>0?victim_largest:output_largest;
+        compact_down_  = victim_smallest;
+        compact_up_ = victim_largest;
         compact_range_ = true;
 
-        CompactionInputFiles victim_level_inputs;
-        victim_level_inputs.level = start_level_;
         CompactionInputFiles up_level_inputs;
         up_level_inputs.level = start_level_ - 1;
-        //avoid false use
-        parent_index_ = -1;
-        //victim level
-        vstorage_->GetOverlappingInputs(start_level_, &compact_down_, &compact_up_,
-                                 &victim_level_inputs.files, parent_index_,
-                                 &parent_index_);
-        if (compaction_picker_->AreFilesInCompaction(victim_level_inputs.files)) {
-          return false;
-        }
         //avoid false use
         parent_index_ = -1;
         //up level
@@ -328,7 +315,7 @@ bool LevelCompactionBuilder::SetupOtherInputsIfNeeded() {
         if (!up_level_inputs.empty()) {
           compaction_inputs_.push_back(up_level_inputs);
         }
-        compaction_inputs_.push_back(victim_level_inputs);
+        compaction_inputs_.push_back(start_level_inputs_);
         compaction_inputs_.push_back(output_level_inputs_);
         
         

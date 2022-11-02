@@ -557,7 +557,7 @@ bool Compaction::IsTrivialMove() const {
 }
 
 void Compaction::AddInputDeletions(VersionEdit* out_edit) {
-  for (size_t which = 0; which < num_input_levels() - 1; which++) {
+  for (size_t which = 0; which < num_input_levels(); which++) {
     for (size_t i = 0; i < inputs_[which].size(); i++) {
       if(compact_range_){
         int up = cfd_->user_comparator()->CompareWithoutTimestamp(
@@ -628,11 +628,6 @@ void Compaction::AddInputDeletions(VersionEdit* out_edit) {
         out_edit->DeleteFile(level(which), inputs_[which][i]->fd.GetNumber());
       }
     }
-  }
-  size_t which = num_input_levels() - 1;
-  for (size_t i = 0; i < inputs_[which].size(); i++) {
-    SPDLOG_INFO("de {} {} {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->smallest.DebugString(true), inputs_[which][i]->largest.DebugString(true), inputs_[which][i]->holes.size(), inputs_[which].level);
-    out_edit->DeleteFile(level(which), inputs_[which][i]->fd.GetNumber());
   }
 }
 
