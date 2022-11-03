@@ -240,6 +240,8 @@ LIB_SOURCES =                                                   \
   util/thread_local.cc                                          \
   util/threadpool_imp.cc                                        \
   util/xxhash.cc                                                \
+  util/zipf.cc                                                  \
+  util/latest-generator.cc                                      \
   utilities/agg_merge/agg_merge.cc                              \
   utilities/backup/backup_engine.cc                             \
   utilities/blob_db/blob_compaction_filter.cc                   \
