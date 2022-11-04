@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 rm /mnt/* -rf
 
 ./db_bench_downcompact \
@@ -20,7 +22,7 @@ rm /mnt/* -rf
 --cache_size=6442450944 \
 --use_direct_io_for_flush_and_compaction \
 -use_direct_reads \
---compression_type=none >> benchmarkslogycsb/Default100write.log
+--compression_type=none >> benchmarkslogycsb/downcompact100write.log
 
 rm /mnt/* -rf
 
@@ -44,7 +46,7 @@ sleep 50
 --cache_size=6442450944 \
 --use_direct_io_for_flush_and_compaction \
 -use_direct_reads \
---compression_type=none >> benchmarkslogycsb/Default80write.log
+--compression_type=none >> benchmarkslogycsb/downcompact80write.log
 
 rm /mnt/* -rf
 
@@ -69,7 +71,7 @@ sleep 50
 --cache_size=6442450944 \
 --use_direct_io_for_flush_and_compaction \
 -use_direct_reads \
---compression_type=none >> benchmarkslogycsb/Default20write.log
+--compression_type=none >> benchmarkslogycsb/downcompact20write.log
 
 rm /mnt/* -rf
 
@@ -94,4 +96,4 @@ sleep 50
 --cache_size=6442450944 \
 --use_direct_io_for_flush_and_compaction \
 -use_direct_reads \
---compression_type=none >> benchmarkslogycsb/Default0write.log
+--compression_type=none >> benchmarkslogycsb/downcompact0write.log

@@ -1206,8 +1206,14 @@ void LevelIterator::SeekToFirst() {
   if(compact_range_ && user_comparator_.CompareWithoutTimestamp(
                ExtractUserKey(compact_down_.Encode()), /*a_has_ts=*/true,
                ExtractUserKey(flevel_->files[file_index_].file_metadata->smallest.Encode()), /*b_has_ts=*/true) > 0){
+        if(user_comparator_.CompareWithoutTimestamp(
+               ExtractUserKey(compact_down_.Encode()), /*a_has_ts=*/true,
+               ExtractUserKey(flevel_->files[file_index_].file_metadata->largest.Encode()), /*b_has_ts=*/true) == 0){
+          Seek(flevel_->files[file_index_].file_metadata->largest.Encode());
+        }else{
+          Seek(compact_down_.Encode());//如果compact_down_ smaller than smallest , point to a key smaller than smallest
+        }
         
-        Seek(compact_down_.Encode());//如果compact_down_ smaller than smallest , point to a key smaller than smallest
         if(user_comparator_.CompareWithoutTimestamp(
               ExtractUserKey(file_iter_.key()), /*a_has_ts=*/true,
               ExtractUserKey(compact_up_.Encode()), /*b_has_ts=*/true) > 0){
