@@ -19,8 +19,8 @@
 #include "test_util/sync_point.h"
 #include "util/string_util.h"
 
-extern std::unordered_map<uint64_t, rocksdb::InternalKey> smallestLables;
-extern std::unordered_map<uint64_t, rocksdb::InternalKey> largestLables;
+extern std::vector<rocksdb::InternalKey> smallestLables;
+extern std::vector<rocksdb::InternalKey> largestLables;
 namespace ROCKSDB_NAMESPACE {
 
 const uint64_t kRangeTombstoneSentinel =
@@ -579,7 +579,7 @@ void Compaction::AddInputDeletions(VersionEdit* out_edit) {
             }
           }
           inputs_[which][i]->holes.erase(iteri, std::end(inputs_[which][i]->holes));
-          smallestLables.erase(inputs_[which][i]->fd.GetNumber());
+          smallestLables[inputs_[which][i]->fd.GetNumber()].Clear();
         }else if(up > 0 && down>= 0){
           SPDLOG_INFO("sm {} {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->smallest.DebugString(true), largestLables[inputs_[which][i]->fd.GetNumber()].DebugString(true), inputs_[which].level);
           inputs_[which][i]->smallest = largestLables[inputs_[which][i]->fd.GetNumber()];
@@ -590,9 +590,9 @@ void Compaction::AddInputDeletions(VersionEdit* out_edit) {
             }
           }
           inputs_[which][i]->holes.erase(std::begin(inputs_[which][i]->holes), iteri);
-          largestLables.erase(inputs_[which][i]->fd.GetNumber());
+          largestLables[inputs_[which][i]->fd.GetNumber()].Clear();
         }else{
-          if(smallestLables.find(inputs_[which][i]->fd.GetNumber()) == smallestLables.end()){
+          if(!smallestLables[inputs_[which][i]->fd.GetNumber()].size()){//without hole
             continue;
           }
           Hole newhole = {smallestLables[inputs_[which][i]->fd.GetNumber()], largestLables[inputs_[which][i]->fd.GetNumber()]};
@@ -619,9 +619,9 @@ void Compaction::AddInputDeletions(VersionEdit* out_edit) {
             inputs_[which][i]->holes.erase(inputs_[which][i]->holes.begin() + indiclow, inputs_[which][i]->holes.begin() + indichigh);
             inputs_[which][i]->holes.insert(inputs_[which][i]->holes.begin() + indiclow, newhole);
           }
-          SPDLOG_INFO("ho {} {} {} {}", inputs_[which][i]->fd.GetNumber(), newhole.smallest.DebugString(true), newhole.largest.DebugString(true), inputs_[which].level); 
-          smallestLables.erase(inputs_[which][i]->fd.GetNumber());
-          largestLables.erase(inputs_[which][i]->fd.GetNumber());
+          SPDLOG_INFO("ho {} {} {} {}", inputs_[which][i]->fd.GetNumber(), newhole.smallest.DebugString(true), newhole.largest.DebugString(true), inputs_[which].level);
+          smallestLables[inputs_[which][i]->fd.GetNumber()].Clear();
+          largestLables[inputs_[which][i]->fd.GetNumber()].Clear();
         }
       }else{
         SPDLOG_INFO("de {} {} {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->smallest.DebugString(true), inputs_[which][i]->largest.DebugString(true), inputs_[which][i]->holes.size(), inputs_[which].level);

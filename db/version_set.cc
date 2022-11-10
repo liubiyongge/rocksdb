@@ -19,6 +19,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <spdlog/spdlog.h>
 
 #include "db/blob/blob_fetcher.h"
 #include "db/blob/blob_file_cache.h"
@@ -85,8 +86,8 @@
 #undef WITH_COROUTINES
 // clang-format on
 
-std::unordered_map<uint64_t, rocksdb::InternalKey> smallestLables;
-std::unordered_map<uint64_t, rocksdb::InternalKey> largestLables;
+std::vector<rocksdb::InternalKey> smallestLables(1000000);
+std::vector<rocksdb::InternalKey> largestLables(1000000);
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -1261,7 +1262,7 @@ void LevelIterator::SeekToFirst() {
               tmp.DecodeFrom(file_iter_.key());
             }
             smallestLables[flevel_->files[file_index_].file_metadata->fd.GetNumber()] = tmp;
-            
+            SPDLOG_INFO("dict {} {}", flevel_->files[file_index_].file_metadata->fd.GetNumber(), smallestLables[flevel_->files[file_index_].file_metadata->fd.GetNumber()].DebugString(true));
             file_iter_.Next();
 
 
@@ -1391,6 +1392,7 @@ bool LevelIterator::NextAndGetResult(IterateResult* result) {
         tmp.DecodeFrom(file_iter_.key());
       }
     largestLables[flevel_->files[file_index_].file_metadata->fd.GetNumber()] = tmp;
+    SPDLOG_INFO("dict {} {}", flevel_->files[file_index_].file_metadata->fd.GetNumber(), largestLables[flevel_->files[file_index_].file_metadata->fd.GetNumber()].DebugString(true));
     return false;
   }
   return is_valid;
