@@ -88,6 +88,7 @@
 
 std::vector<rocksdb::InternalKey> smallestLables(1000000);
 std::vector<rocksdb::InternalKey> largestLables(1000000);
+std::vector<std::int64_t> deleteKVNum(1000000, 0);
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -1262,7 +1263,6 @@ void LevelIterator::SeekToFirst() {
               tmp.DecodeFrom(file_iter_.key());
             }
             smallestLables[flevel_->files[file_index_].file_metadata->fd.GetNumber()] = tmp;
-            SPDLOG_INFO("dict {} {}", flevel_->files[file_index_].file_metadata->fd.GetNumber(), smallestLables[flevel_->files[file_index_].file_metadata->fd.GetNumber()].DebugString(true));
             file_iter_.Next();
 
 
@@ -1392,9 +1392,9 @@ bool LevelIterator::NextAndGetResult(IterateResult* result) {
         tmp.DecodeFrom(file_iter_.key());
       }
     largestLables[flevel_->files[file_index_].file_metadata->fd.GetNumber()] = tmp;
-    SPDLOG_INFO("dict {} {}", flevel_->files[file_index_].file_metadata->fd.GetNumber(), largestLables[flevel_->files[file_index_].file_metadata->fd.GetNumber()].DebugString(true));
     return false;
   }
+  deleteKVNum[flevel_->files[file_index_].file_metadata->fd.GetNumber()]++;
   return is_valid;
 }
 
