@@ -7314,12 +7314,13 @@ void YCSBFillDB(ThreadState* thread) {
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
 
+    int64_t rangenum = FLAGS_loadnum * FLAGS_threads;
     // the number of iterations is the larger of read_ or write_
-
+    
     //write in order
     for (long k = 1; k <= FLAGS_loadnum; k++){
       DB* db = SelectDB(thread);
-      GenerateKeyFromInt(thread->rand.Next() % FLAGS_loadnum, FLAGS_loadnum, &key);
+      GenerateKeyFromInt(thread->rand.Next() % rangenum, rangenum, &key);
 
         //write
         Status s = db->Put(write_options_, key, gen.Generate(value_size));
@@ -7339,7 +7340,6 @@ void YCSBFillDB(ThreadState* thread) {
     thread->stats.AddMessage(msg);
   }
 
-
    // Workload A: Update heavy workload
   // This workload has a mix of 50/50 reads and writes. 
   // An application example is a session store recording recent actions.
@@ -7349,8 +7349,9 @@ void YCSBFillDB(ThreadState* thread) {
   void YCSBWorkloadA(ThreadState* thread) {
     ReadOptions options(FLAGS_verify_checksum, true);
     RandomGenerator gen;
-    init_latestgen(FLAGS_loadnum);
-    init_zipf_generator(0, FLAGS_loadnum);
+    int64_t rangenum = FLAGS_loadnum * FLAGS_threads;
+    init_latestgen(rangenum);
+    init_zipf_generator(0, rangenum);
     
     std::string value;
     int64_t found = 0;
@@ -7375,12 +7376,12 @@ void YCSBFillDB(ThreadState* thread) {
           long k;
           if (FLAGS_YCSB_uniform_distribution){
             //Generate number from uniform distribution            
-            k = thread->rand.Next() % FLAGS_loadnum;
+            k = thread->rand.Next() % rangenum;
           } else { //default
             //Generate number from zipf distribution
-            k = nextValue() % FLAGS_loadnum;            
+            k = nextValue() % rangenum;            
           }
-          GenerateKeyFromInt(k, FLAGS_loadnum, &key);
+          GenerateKeyFromInt(k, rangenum, &key);
 
           int next_op = thread->rand.Next() % 100;
           if (next_op < FLAGS_readwritepercent){
@@ -7416,8 +7417,6 @@ void YCSBFillDB(ThreadState* thread) {
             }                
       }
 
-
-
     } 
     char msg[100];
     snprintf(msg, sizeof(msg), "( reads:%" PRIu64 " writes:%" PRIu64 \
@@ -7425,7 +7424,6 @@ void YCSBFillDB(ThreadState* thread) {
              reads_done, writes_done, readwrites_, found);
     thread->stats.AddMessage(msg);
   }
-
 
   // Workload B: Read mostly workload
   // This workload has a 95/5 reads/write mix. 
