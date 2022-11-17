@@ -315,23 +315,23 @@ bool LevelCompactionBuilder::SetupOtherInputsIfNeeded() {
           return false;
         }
         
-        if(start_level_inputs_.level > 1){
-          CompactionInputFiles up_level_inputs;
-          up_level_inputs.level = start_level_ - 1;
-          //avoid false use
-          parent_index_ = -1;
-          //up level
-          vstorage_->GetOverlappingInputs(up_level_inputs.level, &compact_down_, &compact_up_,
-                                  &up_level_inputs.files, parent_index_,
-                                  &parent_index_);
-          if (compaction_picker_->AreFilesInCompaction(up_level_inputs.files)) {
-            return false;
-          }                 
+        // if(start_level_inputs_.level > 1){
+        //   CompactionInputFiles up_level_inputs;
+        //   up_level_inputs.level = start_level_ - 1;
+        //   //avoid false use
+        //   parent_index_ = -1;
+        //   //up level
+        //   vstorage_->GetOverlappingInputs(up_level_inputs.level, &compact_down_, &compact_up_,
+        //                           &up_level_inputs.files, parent_index_,
+        //                           &parent_index_);
+        //   if (compaction_picker_->AreFilesInCompaction(up_level_inputs.files)) {
+        //     return false;
+        //   }                 
           
-          if (!up_level_inputs.empty()) {
-            compaction_inputs_.push_back(up_level_inputs);
-         }
-        }
+        //   if (!up_level_inputs.empty()) {
+        //     compaction_inputs_.push_back(up_level_inputs);
+        //  }
+        // }
 
         compaction_inputs_.push_back(victim_level_inputs);
         compaction_inputs_.push_back(output_level_inputs_);
