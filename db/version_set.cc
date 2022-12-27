@@ -1797,6 +1797,7 @@ VersionStorageInfo::VersionStorageInfo(
       next_file_to_compact_by_size_(num_levels_),
       compaction_score_(num_levels_),
       compaction_level_(num_levels_),
+      compaction_level_score_(num_levels_),
       l0_delay_trigger_count_(0),
       compact_cursor_(num_levels_),
       accumulated_file_size_(0),
