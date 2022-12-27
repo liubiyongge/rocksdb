@@ -193,7 +193,7 @@ class SubcompactionState {
     }
     for (const auto& file : compaction_outputs_.outputs_) {
       out_edit->AddFile(compaction->output_level(), file.meta);
-      SPDLOG_INFO("add {} {} {}", file.meta.fd.GetNumber(), std::chrono::milliseconds, compaction->output_level());
+      SPDLOG_INFO("add {} {} {}", file.meta.fd.GetNumber(), std::chrono::system_clock::now(), compaction->output_level());
     }
     SPDLOG_INFO("compaction end");
   }
