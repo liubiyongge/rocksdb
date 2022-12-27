@@ -450,7 +450,9 @@ void Compaction::AddInputDeletions(VersionEdit* out_edit) {
   for (size_t which = 0; which < num_input_levels(); which++) {
     for (size_t i = 0; i < inputs_[which].size(); i++) {
       out_edit->DeleteFile(level(which), inputs_[which][i]->fd.GetNumber());
-      SPDLOG_INFO("delete {} {} {} {}", inputs_[which][i]->fd.GetNumber(), std::chrono::system_clock::now(), inputs_[which].level);
+      SPDLOG_INFO("delete {} {} {}", inputs_[which][i]->fd.GetNumber(), std::chrono::duration_cast<std::chrono::seconds>(
+                  std::chrono::system_clock::now().time_since_epoch())
+                  .count(), inputs_[which].level);
     }
   }
 }

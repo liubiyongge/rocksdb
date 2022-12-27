@@ -353,16 +353,16 @@ Compaction* LevelCompactionBuilder::PickCompaction() {
       uint64_t overlapping_bytes = 0;
           // Skip files in next level that is smaller than current file
       while (next_level_it != grandparents_.end() &&
-            internal_comparator_->Compare((*next_level_it)->largest, file->smallest) < 0) {
+            compaction_picker_->icmp()->Compare((*next_level_it)->largest, file->smallest) < 0) {
         next_level_it++;
         
       }
 
       while (next_level_it != grandparents_.end() &&
-            internal_comparator_->Compare((*next_level_it)->smallest, file->largest) < 0) {
+            compaction_picker_->icmp()->Compare((*next_level_it)->smallest, file->largest) < 0) {
         overlapping_bytes += (*next_level_it)->fd.file_size;
 
-        if (internal_comparator_->Compare((*next_level_it)->largest, file->largest) > 0) {
+        if (compaction_picker_->icmp()->Compare((*next_level_it)->largest, file->largest) > 0) {
           // next level file cross large boundary of current file.
           break;
         }
