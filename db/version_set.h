@@ -237,6 +237,9 @@ class VersionStorageInfo {
   // Return level number that has idx'th highest score
   int CompactionScoreLevel(int idx) const { return compaction_level_[idx]; }
 
+
+  //Return level idx score
+  double CompactionLevelScore(int idx) const {return compaction_level_score_[idx];}
   // Return idx'th highest score
   double CompactionScore(int idx) const { return compaction_score_[idx]; }
 
@@ -684,6 +687,7 @@ class VersionStorageInfo {
   // These are used to pick the best compaction level
   std::vector<double> compaction_score_;
   std::vector<int> compaction_level_;
+  std::vector<double> compaction_level_score_;
   int l0_delay_trigger_count_ = 0;  // Count used to trigger slow down and stop
                                     // for number of L0 files.
 

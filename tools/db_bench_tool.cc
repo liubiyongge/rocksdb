@@ -36,6 +36,8 @@
 #include <queue>
 #include <thread>
 #include <unordered_map>
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/basic_file_sink.h>
 
 #include "util/zipf.h"                                                  
 #include "util/latest-generator.h"  
@@ -8952,6 +8954,11 @@ void YCSBFillDB(ThreadState* thread) {
 };
 
 int db_bench_tool(int argc, char** argv) {
+  auto new_logger = spdlog::basic_logger_mt("new_default_logger", "/tmp/dcompact-log.txt", true);
+  new_logger->set_pattern("%v");
+  //spdlog::set_level(spdlog::level::off);
+  spdlog::set_default_logger(new_logger);    
+    
   ROCKSDB_NAMESPACE::port::InstallStackTraceHandler();
   ConfigOptions config_options;
   static bool initialized = false;
