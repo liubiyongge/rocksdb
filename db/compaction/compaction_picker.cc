@@ -589,6 +589,18 @@ void CompactionPicker::GetGrandparents(
   }
 }
 
+void CompactionPicker::GetFirstGrandparents(
+    VersionStorageInfo* vstorage, const CompactionInputFiles& inputs,
+    const CompactionInputFiles& output_level_inputs,
+    std::vector<FileMetaData*>* grandparents) {
+  InternalKey start, limit;
+  GetRange(inputs, output_level_inputs, &start, &limit);
+  // Compute the set of grandparent files that overlap this compaction
+  // (parent == level+1; grandparent == level+2 or the first
+  // level after that has overlapping files)
+  vstorage->GetOverlappingInputs(output_level_inputs.level + 1, &start, &limit, grandparents);
+}
+
 Compaction* CompactionPicker::CompactRange(
     const std::string& cf_name, const MutableCFOptions& mutable_cf_options,
     const MutableDBOptions& mutable_db_options, VersionStorageInfo* vstorage,

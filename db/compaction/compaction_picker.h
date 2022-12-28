@@ -196,6 +196,11 @@ class CompactionPicker {
                        const CompactionInputFiles& output_level_inputs,
                        std::vector<FileMetaData*>* grandparents);
 
+  void GetFirstGrandparents(VersionStorageInfo* vstorage,
+                       const CompactionInputFiles& inputs,
+                       const CompactionInputFiles& output_level_inputs,
+                       std::vector<FileMetaData*>* grandparents);
+
   void PickFilesMarkedForCompaction(const std::string& cf_name,
                                     VersionStorageInfo* vstorage,
                                     int* start_level, int* output_level,

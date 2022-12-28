@@ -342,23 +342,24 @@ Compaction* LevelCompactionBuilder::PickCompaction() {
 
   // Form a compaction object containing the files we picked.
   Compaction* c = GetCompaction();
-  SPDLOG_INFO("score begin");
-  //[first victim sst] [outputlevel score]
-
-  SPDLOG_INFO("downlevelscore {} {}", start_level_inputs_.files[0]->fd.GetNumber(), vstorage_->CompactionLevelScore(output_level_));
-
-  if(compaction_inputs_.size() > 1 && !grandparents_.empty()){
-    auto next_level_it = grandparents_.begin();
+  std::vector<FileMetaData*> mygrandparents;
+  compaction_picker_->GetFirstGrandparents(vstorage_, start_level_inputs_,
+                                          output_level_inputs_, &mygrandparents);
+  if(compaction_inputs_.size() > 1 && !mygrandparents.empty()){
+    SPDLOG_INFO("score begin");
+    //[first victim sst] [outputlevel score]
+    SPDLOG_INFO("downlevelscore {} {}", start_level_inputs_.files[0]->fd.GetNumber(), vstorage_->CompactionLevelScore(output_level_));
+    auto next_level_it = mygrandparents.begin();
     for (auto& file : compaction_inputs_[compaction_inputs_.size()-1].files) {
       uint64_t overlapping_bytes = 0;
           // Skip files in next level that is smaller than current file
-      while (next_level_it != grandparents_.end() &&
+      while (next_level_it != mygrandparents.end() &&
             compaction_picker_->icmp()->Compare((*next_level_it)->largest, file->smallest) < 0) {
         next_level_it++;
         
       }
 
-      while (next_level_it != grandparents_.end() &&
+      while (next_level_it != mygrandparents.end() &&
             compaction_picker_->icmp()->Compare((*next_level_it)->smallest, file->largest) < 0) {
         overlapping_bytes += (*next_level_it)->fd.file_size;
 
@@ -371,9 +372,10 @@ Compaction* LevelCompactionBuilder::PickCompaction() {
       assert(file->compensated_file_size != 0);
       SPDLOG_INFO("downsstscore {} {}", file->fd.GetNumber(), overlapping_bytes * 1024U / file->compensated_file_size);
     }
+     SPDLOG_INFO("score end");
   }
 
-  SPDLOG_INFO("score end");
+ 
   TEST_SYNC_POINT_CALLBACK("LevelCompactionPicker::PickCompaction:Return", c);
   
   return c;
