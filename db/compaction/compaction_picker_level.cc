@@ -341,24 +341,21 @@ Compaction* LevelCompactionBuilder::PickCompaction() {
   }
 
 
-  std::vector<FileMetaData*> mygrandparents;
-  compaction_picker_->GetFirstGrandparents(vstorage_, start_level_inputs_,
-                                          output_level_inputs_, &mygrandparents);
-  if(compaction_inputs_.size() > 1 && !mygrandparents.empty()){
+  if(compaction_inputs_.size() > 1 && !grandparents_.empty()){
     SPDLOG_INFO("score begin");
     //[first victim sst] [outputlevel score]
     SPDLOG_INFO("downlevelscore {} {}", start_level_inputs_.files[0]->fd.GetNumber(), vstorage_->CompactionLevelScore(output_level_));
-    auto next_level_it = mygrandparents.begin();
+    auto next_level_it = grandparents_.begin();
     for (auto& file : compaction_inputs_[compaction_inputs_.size()-1].files) {
       uint64_t overlapping_bytes = 0;
           // Skip files in next level that is smaller than current file
-      while (next_level_it != mygrandparents.end() &&
+      while (next_level_it != grandparents_.end() &&
             compaction_picker_->icmp()->Compare((*next_level_it)->largest, file->smallest) < 0) {
         next_level_it++;
         
       }
 
-      while (next_level_it != mygrandparents.end() &&
+      while (next_level_it != grandparents_.end() &&
             compaction_picker_->icmp()->Compare((*next_level_it)->smallest, file->largest) < 0) {
         overlapping_bytes += (*next_level_it)->fd.file_size;
 
