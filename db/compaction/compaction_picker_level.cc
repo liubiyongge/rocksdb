@@ -340,8 +340,7 @@ Compaction* LevelCompactionBuilder::PickCompaction() {
     return nullptr;
   }
 
-  // Form a compaction object containing the files we picked.
-  Compaction* c = GetCompaction();
+
   std::vector<FileMetaData*> mygrandparents;
   compaction_picker_->GetFirstGrandparents(vstorage_, start_level_inputs_,
                                           output_level_inputs_, &mygrandparents);
@@ -374,7 +373,8 @@ Compaction* LevelCompactionBuilder::PickCompaction() {
     }
      SPDLOG_INFO("score end");
   }
-
+  // Form a compaction object containing the files we picked.
+  Compaction* c = GetCompaction();
  
   TEST_SYNC_POINT_CALLBACK("LevelCompactionPicker::PickCompaction:Return", c);
   
