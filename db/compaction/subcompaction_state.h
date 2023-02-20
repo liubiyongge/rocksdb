@@ -188,12 +188,15 @@ class SubcompactionState {
     for (const auto& file : penultimate_level_outputs_.outputs_) {
       out_edit->AddFile(compaction->GetPenultimateLevel(), file.meta);
     }
-    if(compaction->compact_range_){
-    SPDLOG_INFO("range {} {}", compaction->compact_down_.DebugString(true), compaction->compact_up_.DebugString(true));
-    }
+    // if(compaction->compact_range_){
+    // //SPDLOG_INFO("range {} {}", compaction->compact_down_.DebugString(true), compaction->compact_up_.DebugString(true));
+    // }
     for (const auto& file : compaction_outputs_.outputs_) {
       out_edit->AddFile(compaction->output_level(), file.meta);
-      SPDLOG_INFO("ad {} {} {} {}", file.meta.fd.GetNumber(), file.meta.smallest.DebugString(true), file.meta.largest.DebugString(true), compaction->output_level());
+      SPDLOG_INFO("add {} {} {}", file.meta.fd.GetNumber(), std::chrono::duration_cast<std::chrono::seconds>(
+                  std::chrono::system_clock::now().time_since_epoch())
+                  .count(), compaction->output_level());
+      //SPDLOG_INFO("ad {} {} {} {}", file.meta.fd.GetNumber(), file.meta.smallest.DebugString(true), file.meta.largest.DebugString(true), compaction->output_level());
     }
   }
 

@@ -12,6 +12,7 @@
 #include <cinttypes>
 #include <vector>
 #include <spdlog/spdlog.h>
+#include <chrono>
 
 #include "db/column_family.h"
 #include "rocksdb/compaction_filter.h"
@@ -567,10 +568,13 @@ void Compaction::AddInputDeletions(VersionEdit* out_edit) {
                ExtractUserKey(inputs_[which][i]->smallest.Encode()), /*a_has_ts=*/true,
                ExtractUserKey(compact_down_.Encode()), /*b_has_ts=*/true);
         if(up <= 0 && down>= 0){
-          SPDLOG_INFO("de {} {} {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->smallest.DebugString(true), inputs_[which][i]->largest.DebugString(true), inputs_[which][i]->holes.size(), inputs_[which].level);
+          //SPDLOG_INFO("de {} {} {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->smallest.DebugString(true), inputs_[which][i]->largest.DebugString(true), inputs_[which][i]->holes.size(), inputs_[which].level);
+          SPDLOG_INFO("delete {} {} {}", inputs_[which][i]->fd.GetNumber(), std::chrono::duration_cast<std::chrono::seconds>(
+                  std::chrono::system_clock::now().time_since_epoch())
+                  .count(),  inputs_[which].level);
           out_edit->DeleteFile(level(which), inputs_[which][i]->fd.GetNumber()); 
         }else if(up <= 0 && down < 0){
-          SPDLOG_INFO("la {} {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->largest.DebugString(true), smallestLables[inputs_[which][i]->fd.GetNumber()].DebugString(true), inputs_[which].level);
+          //SPDLOG_INFO("la {} {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->largest.DebugString(true), smallestLables[inputs_[which][i]->fd.GetNumber()].DebugString(true), inputs_[which].level);
           inputs_[which][i]->largest = smallestLables[inputs_[which][i]->fd.GetNumber()];
           auto iteri = inputs_[which][i]->holes.begin();
           for(; iteri != inputs_[which][i]->holes.end(); iteri++){
@@ -581,7 +585,7 @@ void Compaction::AddInputDeletions(VersionEdit* out_edit) {
           inputs_[which][i]->holes.erase(iteri, std::end(inputs_[which][i]->holes));
           smallestLables[inputs_[which][i]->fd.GetNumber()].Clear();
         }else if(up > 0 && down>= 0){
-          SPDLOG_INFO("sm {} {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->smallest.DebugString(true), largestLables[inputs_[which][i]->fd.GetNumber()].DebugString(true), inputs_[which].level);
+          //SPDLOG_INFO("sm {} {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->smallest.DebugString(true), largestLables[inputs_[which][i]->fd.GetNumber()].DebugString(true), inputs_[which].level);
           inputs_[which][i]->smallest = largestLables[inputs_[which][i]->fd.GetNumber()];
           auto iteri = inputs_[which][i]->holes.begin();
           for(; iteri != inputs_[which][i]->holes.end(); iteri++){
@@ -619,19 +623,25 @@ void Compaction::AddInputDeletions(VersionEdit* out_edit) {
             inputs_[which][i]->holes.erase(inputs_[which][i]->holes.begin() + indiclow, inputs_[which][i]->holes.begin() + indichigh);
             inputs_[which][i]->holes.insert(inputs_[which][i]->holes.begin() + indiclow, newhole);
           }
-          SPDLOG_INFO("ho {} {} {} {}", inputs_[which][i]->fd.GetNumber(), newhole.smallest.DebugString(true), newhole.largest.DebugString(true), inputs_[which].level);
+          //_INFO("ho {} {} {} {}", inputs_[which][i]->fd.GetNumber(), newhole.smallest.DebugString(true), newhole.largest.DebugString(true), inputs_[which].level);
           smallestLables[inputs_[which][i]->fd.GetNumber()].Clear();
           largestLables[inputs_[which][i]->fd.GetNumber()].Clear();
         }
       }else{
-        SPDLOG_INFO("de {} {} {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->smallest.DebugString(true), inputs_[which][i]->largest.DebugString(true), inputs_[which][i]->holes.size(), inputs_[which].level);
+        //SPDLOG_INFO("de {} {} {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->smallest.DebugString(true), inputs_[which][i]->largest.DebugString(true), inputs_[which][i]->holes.size(), inputs_[which].level);
+        SPDLOG_INFO("delete {} {} {}", inputs_[which][i]->fd.GetNumber(), std::chrono::duration_cast<std::chrono::seconds>(
+                  std::chrono::system_clock::now().time_since_epoch())
+                  .count(), inputs_[which].level);
         out_edit->DeleteFile(level(which), inputs_[which][i]->fd.GetNumber());
       }
     }
   }
   size_t which = num_input_levels() - 1;
   for (size_t i = 0; i < inputs_[which].size(); i++) {
-    SPDLOG_INFO("de {} {} {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->smallest.DebugString(true), inputs_[which][i]->largest.DebugString(true), inputs_[which][i]->holes.size(), inputs_[which].level);
+    //SPDLOG_INFO("de {} {} {} {} {}",inputs_[which][i]->fd.GetNumber(), inputs_[which][i]->smallest.DebugString(true), inputs_[which][i]->largest.DebugString(true), inputs_[which][i]->holes.size(), inputs_[which].level);
+    SPDLOG_INFO("delete {} {} {}", inputs_[which][i]->fd.GetNumber(), std::chrono::duration_cast<std::chrono::seconds>(
+                  std::chrono::system_clock::now().time_since_epoch())
+                  .count(), inputs_[which].level);
     out_edit->DeleteFile(level(which), inputs_[which][i]->fd.GetNumber());
   }
 }

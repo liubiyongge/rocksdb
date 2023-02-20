@@ -3298,7 +3298,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
             f->oldest_blob_file_number, f->oldest_ancester_time,
             f->file_creation_time, f->file_checksum, f->file_checksum_func_name,
             f->min_timestamp, f->max_timestamp, f->unique_id);
-        SPDLOG_INFO("mv {} {}", f->fd.GetNumber(), c->output_level());
+        //SPDLOG_INFO("mv {} {}", f->fd.GetNumber(), c->output_level());
         ROCKS_LOG_BUFFER(
             log_buffer,
             "[%s] Moving #%" PRIu64 " to level-%d %" PRIu64 " bytes\n",
