@@ -1224,26 +1224,31 @@ void LevelIterator::SeekToFirst() {
 
         file_iter_.Prev();
         //处理存在相同的user_key，而没有指向在这个user_key后面的internalkey的情况
-        if(user_comparator_.CompareWithoutTimestamp(
-               ExtractUserKey(file_iter_.key()), /*a_has_ts=*/true,
-               ExtractUserKey(compact_up_.Encode()), /*b_has_ts=*/true) != 0 ||
-               (holepos_ > 0 && 
-          icomparator_.InternalKeyComparator::Compare(
-            file_iter_.key(),
-            flevel_->files[file_index_].file_metadata->holes[holepos_-1].largest.Encode()
-          ) < 0 && 
-          icomparator_.InternalKeyComparator::Compare(
-            file_iter_.key(),
-            flevel_->files[file_index_].file_metadata->holes[holepos_-1].smallest.Encode()
-          ) > 0)){
+        // if(user_comparator_.CompareWithoutTimestamp(
+        //        ExtractUserKey(file_iter_.key()), /*a_has_ts=*/true,
+        //        ExtractUserKey(compact_up_.Encode()), /*b_has_ts=*/true) != 0 ||
+        //        (holepos_ > 0 && 
+        //   icomparator_.InternalKeyComparator::Compare(
+        //     file_iter_.key(),
+        //     flevel_->files[file_index_].file_metadata->holes[holepos_-1].largest.Encode()
+        //   ) < 0 && 
+        //   icomparator_.InternalKeyComparator::Compare(
+        //     file_iter_.key(),
+        //     flevel_->files[file_index_].file_metadata->holes[holepos_-1].smallest.Encode()
+        //   ) > 0)){
 
-        }else{
-            if(holepos_ > 0 && icomparator_.InternalKeyComparator::Compare(
-              file_iter_.key(),
-              flevel_->files[file_index_].file_metadata->holes[holepos_-1].smallest.Encode()) == 0){
-                holepos_--;
-            }
-            file_iter_.Prev();
+        // }else{
+        //     if(holepos_ > 0 && icomparator_.InternalKeyComparator::Compare(
+        //       file_iter_.key(),
+        //       flevel_->files[file_index_].file_metadata->holes[holepos_-1].smallest.Encode()) == 0){
+        //         holepos_--;
+        //     }
+        //     file_iter_.Prev();
+        // }
+        if(user_comparator_.CompareWithoutTimestamp(
+                ExtractUserKey(file_iter_.key()), /*a_has_ts=*/true,
+                ExtractUserKey(compact_down_.Encode()), /*b_has_ts=*/true) == 0){
+          file_iter_.Prev();
         }
 
         InternalKey tmp;
@@ -1373,8 +1378,8 @@ bool LevelIterator::NextAndGetResult(IterateResult* result) {
   //reach up bound
   if(compact_range_ && is_valid  && 
   user_comparator_.CompareWithoutTimestamp(
-               ExtractUserKey(file_iter_.key()), /*a_has_ts=*/true,
-               ExtractUserKey(compact_up_.Encode()), /*b_has_ts=*/true) > 0){//非Valid了，超出了一一边的边界
+               ExtractUserKey(file_iter_.key()),
+               ExtractUserKey(compact_up_.Encode())) > 0){//非Valid了，超出了一一边的边界
     InternalKey tmp;
     if(holepos_ < (int)flevel_->files[file_index_].file_metadata->holes.size() && 
       icomparator_.InternalKeyComparator::Compare(

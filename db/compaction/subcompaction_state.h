@@ -198,6 +198,7 @@ class SubcompactionState {
                   .count(), compaction->output_level());
       //SPDLOG_INFO("ad {} {} {} {}", file.meta.fd.GetNumber(), file.meta.smallest.DebugString(true), file.meta.largest.DebugString(true), compaction->output_level());
     }
+    SPDLOG_INFO("compaction end");
   }
 
   void Cleanup(Cache* cache);

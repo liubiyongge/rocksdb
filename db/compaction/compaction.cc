@@ -558,6 +558,7 @@ bool Compaction::IsTrivialMove() const {
 }
 
 void Compaction::AddInputDeletions(VersionEdit* out_edit) {
+  SPDLOG_INFO("compaction begin");
   for (size_t which = 0; which < num_input_levels() - 1; which++) {
     for (size_t i = 0; i < inputs_[which].size(); i++) {
       if(compact_range_){
