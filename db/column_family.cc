@@ -1460,7 +1460,7 @@ Env::WriteLifeTimeHint ColumnFamilyData::CalculateSSTWriteHint(int level) {
   if (level == 0) {
     return Env::WLTH_MEDIUM;
   }
-  int base_level = current_->storage_info()->base_level();
+  // int base_level = current_->storage_info()->base_level();
 
   return static_cast<Env::WriteLifeTimeHint>(level + 3);
   // // L1: medium, L2: long, ...
