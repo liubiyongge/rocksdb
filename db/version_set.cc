@@ -2099,6 +2099,7 @@ VersionStorageInfo::VersionStorageInfo(
       next_file_to_compact_by_size_(num_levels_),
       compaction_score_(num_levels_),
       compaction_level_(num_levels_),
+      level_score_(num_levels_),
       l0_delay_trigger_count_(0),
       compact_cursor_(num_levels_),
       accumulated_file_size_(0),
@@ -3087,6 +3088,7 @@ void VersionStorageInfo::ComputeCompactionScore(
     }
     compaction_level_[level] = level;
     compaction_score_[level] = score;
+    level_score_[level] = score;
   }
 
   // sort all the levels based on their score. Higher scores get listed

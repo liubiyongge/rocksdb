@@ -240,6 +240,7 @@ class VersionStorageInfo {
   // Return idx'th highest score
   double CompactionScore(int idx) const { return compaction_score_[idx]; }
 
+  double CompactionLevelScore(int idx) const {return level_score_[idx]; }
   void GetOverlappingInputs(
       int level, const InternalKey* begin,  // nullptr means before all keys
       const InternalKey* end,               // nullptr means after all keys
@@ -684,6 +685,7 @@ class VersionStorageInfo {
   // These are used to pick the best compaction level
   std::vector<double> compaction_score_;
   std::vector<int> compaction_level_;
+  std::vector<double> level_score_;
   int l0_delay_trigger_count_ = 0;  // Count used to trigger slow down and stop
                                     // for number of L0 files.
 

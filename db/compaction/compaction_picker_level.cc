@@ -12,6 +12,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <spdlog/spdlog.h>
 
 #include "db/version_edit.h"
 #include "logging/log_buffer.h"
@@ -692,12 +693,31 @@ bool LevelCompactionBuilder::PickFileToCompact() {
       }
     }
     base_index_ = index;
+    //log level score and file score
+    // 1 2 3 4 -> 2 3 4 5
+    if(start_level_inputs_.size() > 0 && start_level_ > 0 && start_level_ < vstorage_->num_non_empty_levels() - 2){
+      SPDLOG_INFO("score=========");
+      SPDLOG_INFO("victim level {} victim sst {} down level score {}", start_level_, f->fd.GetNumber(), vstorage_->CompactionLevelScore(start_level_+1));
+      const std::vector<FileMetaData*>& down_files = vstorage_->LevelFiles(start_level_+1);
+      const std::vector<int>& down_file_scores = vstorage_->FilesByCompactionPri(start_level_+1);
+      //hash filenum -> idx
+      std::unordered_map<uint64_t, int> fileid_cmpindex;//[fileid, cmp_index+1]
+      for (unsigned int down_idx = vstorage_->NextCompactionIndex(start_level_+1);
+            down_idx < 100 && down_idx < down_file_scores.size(); down_idx++){
+          fileid_cmpindex[down_files[down_file_scores[down_idx]]->fd.GetNumber()] = down_idx + 1;
+      }
+        SPDLOG_INFO("downlevel cmp index {}", vstorage_->NextCompactionIndex(start_level_+1));
+      for(auto df: output_level_inputs.files){
+          SPDLOG_INFO("down file id {} down file cmpindex {}", df->fd.GetNumber(), fileid_cmpindex[df->fd.GetNumber()]);
+      }
+      SPDLOG_INFO("end===========");
+    }
     break;
   }
 
   // store where to start the iteration in the next call to PickCompaction
   if (ioptions_.compaction_pri != kRoundRobin) {
-    vstorage_->SetNextCompactionIndex(start_level_, cmp_idx);
+    vstorage_->SetNextCompactionIndex(start_level_, cmp_idx + 1);
   }
   return start_level_inputs_.size() > 0;
 }

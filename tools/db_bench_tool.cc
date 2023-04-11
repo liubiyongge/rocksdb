@@ -988,6 +988,9 @@ DEFINE_uint64(fifo_compaction_max_table_files_size_mb, 0,
 DEFINE_bool(fifo_compaction_allow_compaction, true,
             "Allow compaction in FIFO compaction.");
 
+
+
+
 DEFINE_uint64(fifo_compaction_ttl, 0, "TTL for the SST Files in seconds.");
 
 DEFINE_uint64(fifo_age_for_warm, 0, "age_for_warm for FIFO compaction.");
@@ -8956,9 +8959,9 @@ void YCSBFillDB(ThreadState* thread) {
 };
 
 int db_bench_tool(int argc, char** argv) {
-  auto new_logger = spdlog::basic_logger_mt("new_default_logger", "/tmp/rangecompaction-log.txt", true);
+  auto new_logger = spdlog::basic_logger_mt("new_default_logger", "/tmp/spdlog.txt", true);
   new_logger->set_pattern("%v");
-  spdlog::set_level(spdlog::level::off);
+  // spdlog::set_level(spdlog::level::off);
   spdlog::set_default_logger(new_logger);    
   ROCKSDB_NAMESPACE::port::InstallStackTraceHandler();
   ConfigOptions config_options;
