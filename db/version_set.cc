@@ -2095,10 +2095,12 @@ VersionStorageInfo::VersionStorageInfo(
       base_level_(num_levels_ == 1 ? -1 : 1),
       level_multiplier_(0.0),
       files_by_compaction_pri_(num_levels_),
+      scores_by_compaction_pri_(num_levels_),
       level0_non_overlapping_(false),
       next_file_to_compact_by_size_(num_levels_),
       compaction_score_(num_levels_),
       compaction_level_(num_levels_),
+      compaction_level_score_(num_levels_),
       l0_delay_trigger_count_(0),
       compact_cursor_(num_levels_),
       accumulated_file_size_(0),
@@ -3087,6 +3089,7 @@ void VersionStorageInfo::ComputeCompactionScore(
     }
     compaction_level_[level] = level;
     compaction_score_[level] = score;
+    compaction_level_score_[level] = score;;
   }
 
   // sort all the levels based on their score. Higher scores get listed
@@ -3435,7 +3438,7 @@ void SortFileByOverlappingRatio(
     const InternalKeyComparator& icmp, const std::vector<FileMetaData*>& files,
     const std::vector<FileMetaData*>& next_level_files, SystemClock* clock,
     int level, int num_non_empty_levels, uint64_t ttl,
-    std::vector<Fsize>* temp) {
+    std::vector<Fsize>* temp, std::vector<uint64_t> & scores_by_compaction_pri) {
   std::unordered_map<uint64_t, uint64_t> file_to_order;
   auto next_level_it = next_level_files.begin();
 
@@ -3494,6 +3497,9 @@ void SortFileByOverlappingRatio(
                       return file_to_order[f1.file->fd.GetNumber()] <
                              file_to_order[f2.file->fd.GetNumber()];
                     });
+  for(size_t i = 0; i < num_to_sort; i++){
+    scores_by_compaction_pri.push_back(file_to_order[temp->at(i).file->fd.GetNumber()]);
+  }
 }
 
 void SortFileByRoundRobin(const InternalKeyComparator& icmp,
@@ -3563,6 +3569,7 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(
   for (int level = 0; level < num_levels() - 1; level++) {
     const std::vector<FileMetaData*>& files = files_[level];
     auto& files_by_compaction_pri = files_by_compaction_pri_[level];
+
     assert(files_by_compaction_pri.size() == 0);
 
     // populate a temp vector for sorting based on size
@@ -3571,7 +3578,8 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(
       temp[i].index = i;
       temp[i].file = files[i];
     }
-
+    //record file score
+    std::vector<uint64_t> &scores_by_compaction_pri = scores_by_compaction_pri_[level];
     // sort the top number_of_files_to_sort_ based on file size
     size_t num = VersionStorageInfo::kNumberFilesToSort;
     if (num > temp.size()) {
@@ -3599,7 +3607,7 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(
       case kMinOverlappingRatio:
         SortFileByOverlappingRatio(*internal_comparator_, files_[level],
                                    files_[level + 1], ioptions.clock, level,
-                                   num_non_empty_levels_, options.ttl, &temp);
+                                   num_non_empty_levels_, options.ttl, &temp, scores_by_compaction_pri);
         break;
       case kRoundRobin:
         SortFileByRoundRobin(*internal_comparator_, &compact_cursor_,
@@ -3858,6 +3866,66 @@ void VersionStorageInfo::GetCleanInputsWithinInterval(
   GetOverlappingInputsRangeBinarySearch(level, begin, end, inputs,
                                         hint_index, file_index,
                                         true /* within_interval */);
+}
+
+void VersionStorageInfo::GetOverlappingInputsRangeBinarySearch(
+      int level,                 // level > 0
+      const InternalKey* begin,  // nullptr means before all keys
+      const InternalKey* end,    // nullptr means after all keys
+      std::vector<FileMetaData*>* inputs) const {
+  assert(level > 0);
+
+  auto user_cmp = user_comparator_;
+  const FdWithKeyRange* files = level_files_brief_[level].files;
+  const int num_files = static_cast<int>(level_files_brief_[level].num_files);
+
+  // begin to use binary search to find lower bound
+  // and upper bound.
+  int start_index = 0;
+  int end_index = num_files;
+
+  if (begin != nullptr) {
+    // if within_interval is true, with file_key would find
+    // not overlapping ranges in std::lower_bound.
+    auto cmp = [&user_cmp](const FdWithKeyRange& f,
+                                             const InternalKey* k) {
+      auto& file_key = f.file_metadata->largest;
+      return sstableKeyCompare(user_cmp, file_key, *k) < 0;
+    };
+
+    start_index = static_cast<int>(
+        std::lower_bound(files, files + num_files, begin, cmp) - files);
+
+  }
+
+  if (end != nullptr) {
+    // if within_interval is true, with file_key would find
+    // not overlapping ranges in std::upper_bound.
+    auto cmp = [&user_cmp](const InternalKey* k,
+                                             const FdWithKeyRange& f) {
+      auto& file_key = f.file_metadata->smallest;
+      return sstableKeyCompare(user_cmp, *k, file_key) < 0;
+    };
+
+    end_index = static_cast<int>(
+        std::upper_bound(files + start_index, files + num_files, end, cmp) -
+        files);
+  }
+
+  assert(start_index <= end_index);
+
+  // If there were no overlapping files, return immediately.
+  if (start_index == end_index) {
+    return;
+  }
+
+  assert(start_index < end_index);
+
+
+  // insert overlapping files into vector
+  for (int i = start_index; i < end_index; i++) {
+    inputs->push_back(files_[level][i]);
+  }
 }
 
 // Store in "*inputs" all files in "level" that overlap [begin,end]

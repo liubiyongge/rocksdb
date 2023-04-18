@@ -257,10 +257,12 @@ class CompactionOutputs {
   // The current file is pending close, which needs to run `close_file_func()`
   // first to add a new key.
   bool pending_close_ = false;
-
+public:
   // current output builder and writer
   std::unique_ptr<TableBuilder> builder_;
+  
   std::unique_ptr<WritableFileWriter> file_writer_;
+private:  
   uint64_t current_output_file_size_ = 0;
 
   // all the compaction outputs so far

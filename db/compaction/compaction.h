@@ -386,7 +386,9 @@ class Compaction {
                                       const int start_level,
                                       const int output_level);
 
-
+  VersionStorageInfo* GetVersionStorageInfo(){
+    return input_vstorage_;
+  }
  private:
   // mark (or clear) all files that are being compacted
   void MarkFilesBeingCompacted(bool mark_as_compacted);

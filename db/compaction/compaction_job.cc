@@ -1252,6 +1252,39 @@ Status CompactionJob::FinishCompactionOutputFile(
 
   const uint64_t current_entries = outputs.NumEntries();
 
+  //Get Level
+  const int file_output_level = write_hint_ - 3;
+  //Level 0 and highest level not allowed
+  if(file_output_level > 0 && file_output_level < compact_->compaction->GetVersionStorageInfo()->num_non_empty_levels() - 1){    
+    //Get OverlapSize
+    std::vector<FileMetaData*> overlapfiles;
+    
+    compact_->compaction->GetVersionStorageInfo()->GetOverlappingInputsRangeBinarySearch(file_output_level + 1, 
+      &(meta->smallest), &(meta->largest), &overlapfiles);
+    uint64_t overlapping_bytes = 0;
+    for(auto ofile: overlapfiles){
+      overlapping_bytes += ofile->fd.file_size;
+    }
+    if(overlapping_bytes != 0){
+      //Get file Score
+      if(outputs.builder_->FileSize() != 0){
+        uint64_t file_score = overlapping_bytes * 1024U / outputs.builder_->FileSize();
+        //Get cmp index
+        const int cmp_index  = compact_->compaction->GetVersionStorageInfo()->NextCompactionIndex(file_output_level);
+        const std::vector<uint64_t>& file_scores = compact_->compaction->GetVersionStorageInfo()->ScoresByCompactionPri(file_output_level);
+        //Get file in cmp index
+        int file_index = std::lower_bound(file_scores.begin(), file_scores.end(), file_score) - file_scores.begin();
+        int priority_index = std::max(file_index - cmp_index, 0);
+        //Get Level Score
+        SPDLOG_INFO("filepriority {} {} {}", meta->fd.GetNumber(), 
+          compact_->compaction->GetVersionStorageInfo()->CompactionLevelScore(file_output_level), priority_index);
+        //outputs.file_writer_->writable_file()->SetWriteLifeTimeHint()
+      }else{
+        SPDLOG_INFO("error {} {}", meta->fd.GetNumber(), outputs.builder_->FileSize());
+      }
+    }
+
+  }
   s = outputs.Finish(s);
 
   if (s.ok()) {

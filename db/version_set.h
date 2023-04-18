@@ -240,6 +240,7 @@ class VersionStorageInfo {
   // Return idx'th highest score
   double CompactionScore(int idx) const { return compaction_score_[idx]; }
 
+  double CompactionLevelScore(int idx) const {return compaction_level_score_[idx];}
   void GetOverlappingInputs(
       int level, const InternalKey* begin,  // nullptr means before all keys
       const InternalKey* end,               // nullptr means after all keys
@@ -258,6 +259,13 @@ class VersionStorageInfo {
       int hint_index = -1,        // index of overlap file
       int* file_index = nullptr)  // return index of overlap file
       const;
+
+  void GetOverlappingInputsRangeBinarySearch(
+      int level,                 // level > 0
+      const InternalKey* begin,  // nullptr means before all keys
+      const InternalKey* end,    // nullptr means after all keys
+      std::vector<FileMetaData*>* inputs) const;
+
 
   void GetOverlappingInputsRangeBinarySearch(
       int level,                 // level > 0
@@ -424,6 +432,11 @@ class VersionStorageInfo {
   const std::vector<int>& FilesByCompactionPri(int level) const {
     assert(finalized_);
     return files_by_compaction_pri_[level];
+  }
+
+  const std::vector<uint64_t>& ScoresByCompactionPri(int level) const{
+    assert(finalized_);
+    return scores_by_compaction_pri_[level];
   }
 
   // REQUIRES: ComputeCompactionScore has been called
@@ -628,7 +641,7 @@ class VersionStorageInfo {
   // size. The file with the largest size is at the front.
   // This vector stores the index of the file from files_.
   std::vector<std::vector<int>> files_by_compaction_pri_;
-
+  std::vector<std::vector<uint64_t>> scores_by_compaction_pri_;
   // If true, means that files in L0 have keys with non overlapping ranges
   bool level0_non_overlapping_;
 
@@ -684,6 +697,7 @@ class VersionStorageInfo {
   // These are used to pick the best compaction level
   std::vector<double> compaction_score_;
   std::vector<int> compaction_level_;
+  std::vector<double> compaction_level_score_;
   int l0_delay_trigger_count_ = 0;  // Count used to trigger slow down and stop
                                     // for number of L0 files.
 

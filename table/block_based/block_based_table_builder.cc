@@ -264,6 +264,11 @@ struct BlockBasedTableBuilder::Rep {
   // compression dictionary is enabled so we can finalize the dictionary before
   // compressing any data blocks.
   std::vector<std::string> data_block_buffers;
+
+  // std::vector<char*>  write_buffers;
+  // std::uint32_t write_buffer_pos = 1024 * 1024 * 32;
+  // const std::uint32_t fixed_buffer_size = 1024 * 1024 * 32;
+  // bool is_open_write_buffer = true;
   BlockBuilder range_del_block;
 
   InternalKeySliceTransform internal_prefix_transform;
@@ -382,6 +387,36 @@ struct BlockBasedTableBuilder::Rep {
       status_ok.store(false, std::memory_order_relaxed);
     }
   }
+
+  // void BufferedWrite(const Slice& slice){
+  //   uint32_t data_left = slice.size();
+  //   char* data = (char*)slice.data();
+  //   while(data_left){
+  //     uint32_t buffer_left = fixed_buffer_size - write_buffer_pos;
+  //     uint32_t to_buffer = data_left;
+  //     if(!buffer_left){
+  //       char *buf;
+  //         int ret = posix_memalign((void**)&buf, 1024 * 1024, fixed_buffer_size);
+  //       if (ret) {
+  //         SetIOStatus(IOStatus::Aborted("failed allocating alignment write buffer\n"));
+  //         return;
+  //       }
+        
+  //       write_buffers.push_back(buf);
+  //       write_buffer_pos = 0;
+  //       buffer_left = fixed_buffer_size;
+  //     }
+
+  //     if(to_buffer > buffer_left){
+  //       to_buffer = buffer_left;
+  //     }
+  //     memcpy(write_buffers.back() + write_buffer_pos, data, to_buffer);
+  //     write_buffer_pos += to_buffer;
+  //     data_left -= to_buffer;
+  //     data += to_buffer;
+
+  //   }
+  // }
 
   // Never erase an existing I/O status that is not OK.
   // Calling this will also SetStatus(ios)
@@ -1239,7 +1274,9 @@ void BlockBasedTableBuilder::WriteRawBlock(const Slice& block_contents,
   handle->set_size(block_contents.size());
   assert(status().ok());
   assert(io_status().ok());
-
+  // if(r->is_open_write_buffer){
+  //   r->BufferedWrite(block_contents);
+  // }else
   {
     IOStatus io_s = r->file->Append(block_contents);
     if (!io_s.ok()) {
@@ -1266,6 +1303,10 @@ void BlockBasedTableBuilder::WriteRawBlock(const Slice& block_contents,
   TEST_SYNC_POINT_CALLBACK(
       "BlockBasedTableBuilder::WriteRawBlock:TamperWithChecksum",
       trailer.data());
+
+  // if(r->is_open_write_buffer){
+  //   r->BufferedWrite(block_contents);
+  // }else
   {
     IOStatus io_s = r->file->Append(Slice(trailer.data(), trailer.size()));
     if (!io_s.ok()) {
@@ -1802,11 +1843,16 @@ void BlockBasedTableBuilder::WriteFooter(BlockHandle& metaindex_block_handle,
   footer.Build(kBlockBasedTableMagicNumber, r->table_options.format_version,
                r->get_offset(), r->table_options.checksum,
                metaindex_block_handle, index_block_handle);
-  IOStatus ios = r->file->Append(footer.GetSlice());
-  if (ios.ok()) {
-    r->set_offset(r->get_offset() + footer.GetSlice().size());
-  } else {
-    r->SetIOStatus(ios);
+  // if(r->is_open_write_buffer){
+  //   r->BufferedWrite(footer.GetSlice());
+  // }else
+  {
+    IOStatus ios = r->file->Append(footer.GetSlice());
+    if (ios.ok()) {
+      r->set_offset(r->get_offset() + footer.GetSlice().size());
+    } else {
+      r->SetIOStatus(ios);
+    }
   }
 }
 
@@ -2012,6 +2058,17 @@ Status BlockBasedTableBuilder::Finish() {
   if (ok()) {
     WriteFooter(metaindex_block_handle, index_block_handle);
   }
+  // if(r->is_open_write_buffer && r->write_buffers.size() > 0){
+  //   for(size_t i = 0; i < r->write_buffers.size() - 1; i++){
+  //     r->file->Append(Slice(r->write_buffers[i], r->fixed_buffer_size));
+  //     free(r->write_buffers[i]);
+  //   }
+  //   r->file->Append(Slice(r->write_buffers.back(), r->write_buffer_pos));
+  //   free(r->write_buffers.back());
+  //   r->write_buffers.clear();
+  // }
+  
+
   r->state = Rep::State::kClosed;
   r->SetStatus(r->CopyIOStatus());
   Status ret_status = r->CopyStatus();
