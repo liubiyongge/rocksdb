@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <cinttypes>
 #include <vector>
-
+#include <spdlog/spdlog.h>
 #include "db/builder.h"
 #include "db/db_iter.h"
 #include "db/dbformat.h"
@@ -998,7 +998,9 @@ Status FlushJob::WriteLevel0Table() {
                    meta_.file_creation_time, meta_.file_checksum,
                    meta_.file_checksum_func_name, meta_.min_timestamp,
                    meta_.max_timestamp, meta_.unique_id);
-
+    SPDLOG_INFO("flush {} {}", meta_.fd.GetNumber(), std::chrono::duration_cast<std::chrono::seconds>(
+                  std::chrono::system_clock::now().time_since_epoch())
+                  .count());    
     edit_->SetBlobFileAdditions(std::move(blob_file_additions));
   }
 #ifndef ROCKSDB_LITE
