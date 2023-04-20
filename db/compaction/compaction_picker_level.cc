@@ -12,7 +12,7 @@
 #include <string>
 #include <utility>
 #include <vector>
-
+#include <spdlog/spdlog.h>
 #include "db/version_edit.h"
 #include "logging/log_buffer.h"
 #include "test_util/sync_point.h"
@@ -692,6 +692,15 @@ bool LevelCompactionBuilder::PickFileToCompact() {
       }
     }
     base_index_ = index;
+    //log level score and file score
+    // 1 2 3 4 -> 2 3 4 5
+    if(start_level_inputs_.size() > 0 && start_level_ > 0 && start_level_ < vstorage_->num_non_empty_levels() - 1){
+      SPDLOG_INFO("score=========");
+      const std::vector<uint64_t>& scoresby = vstorage_->ScoresByCompactionPri(start_level_);
+      SPDLOG_INFO("victim level {} victim sst {} level score {} cmpindex {} score {} filesize {}", start_level_, f->fd.GetNumber(),
+       vstorage_->CompactionLevelScore(start_level_), cmp_idx, scoresby.size()>cmp_idx?scoresby[cmp_idx]:-1, f->fd.file_size);
+      SPDLOG_INFO("end===========");
+    }    
     break;
   }
 

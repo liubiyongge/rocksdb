@@ -1272,12 +1272,26 @@ Status CompactionJob::FinishCompactionOutputFile(
         //Get cmp index
         const int cmp_index  = compact_->compaction->GetVersionStorageInfo()->NextCompactionIndex(file_output_level);
         const std::vector<uint64_t>& file_scores = compact_->compaction->GetVersionStorageInfo()->ScoresByCompactionPri(file_output_level);
+        auto files_pri = compact_->compaction->GetVersionStorageInfo()->FilesByCompactionPri(file_output_level);
         //Get file in cmp index
         int file_index = std::lower_bound(file_scores.begin(), file_scores.end(), file_score) - file_scores.begin();
         int priority_index = std::max(file_index - cmp_index, 0);
         //Get Level Score
-        SPDLOG_INFO("filepriority {} {} {}", meta->fd.GetNumber(), 
-          compact_->compaction->GetVersionStorageInfo()->CompactionLevelScore(file_output_level), priority_index);
+        SPDLOG_INFO("filepriority {} {} {} {} {} {}", 
+          meta->fd.GetNumber(), 
+          compact_->compaction->GetVersionStorageInfo()->CompactionLevelScore(file_output_level), 
+          priority_index, 
+          file_score, 
+          outputs.builder_->FileSize(), 
+          overlapfiles.size());
+
+        SPDLOG_INFO("fileidlast {} lastscore {}", meta->fd.GetNumber(), file_scores.back());
+
+        SPDLOG_INFO("fileidrange {} {} {}", meta->fd.GetNumber(), meta->smallest.DebugString(true), meta->largest.DebugString(true));  
+        //解决overlap sst变化问题
+        for(auto ofile: overlapfiles){
+          SPDLOG_INFO("fileid {} overlapfile {} {} {}", meta->fd.GetNumber(), ofile->fd.GetNumber(), ofile->smallest.DebugString(true), ofile->largest.DebugString(true));
+        }
         //outputs.file_writer_->writable_file()->SetWriteLifeTimeHint()
       }else{
         SPDLOG_INFO("error {} {}", meta->fd.GetNumber(), outputs.builder_->FileSize());
