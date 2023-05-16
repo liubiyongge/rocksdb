@@ -1268,7 +1268,7 @@ Status CompactionJob::FinishCompactionOutputFile(
     if(overlapping_bytes != 0){
       //Get file Score
       if(outputs.builder_->FileSize() != 0){
-        uint64_t file_score = overlapping_bytes * 1024U / outputs.builder_->FileSize();
+        uint64_t file_score = overlapping_bytes * 1024U / outputs.builder_->FileSize() + 10000;
         //Get cmp index
         const int cmp_index  = compact_->compaction->GetVersionStorageInfo()->NextCompactionIndex(file_output_level);
         const std::vector<uint64_t>& file_scores = compact_->compaction->GetVersionStorageInfo()->ScoresByCompactionPri(file_output_level);
@@ -1287,10 +1287,10 @@ Status CompactionJob::FinishCompactionOutputFile(
 
         SPDLOG_INFO("fileidlast {} lastscore {}", meta->fd.GetNumber(), file_scores.back());
 
-        SPDLOG_INFO("fileidrange {} {} {}", meta->fd.GetNumber(), meta->smallest.DebugString(true), meta->largest.DebugString(true));  
+        SPDLOG_INFO("fileidrange {}", meta->fd.GetNumber());  
         //解决overlap sst变化问题
         for(auto ofile: overlapfiles){
-          SPDLOG_INFO("fileid {} overlapfile {} {} {}", meta->fd.GetNumber(), ofile->fd.GetNumber(), ofile->smallest.DebugString(true), ofile->largest.DebugString(true));
+          SPDLOG_INFO("fileid {} overlapfile {}", meta->fd.GetNumber(), ofile->fd.GetNumber());
         }
         //outputs.file_writer_->writable_file()->SetWriteLifeTimeHint()
       }else{
