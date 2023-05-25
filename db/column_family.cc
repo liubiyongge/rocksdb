@@ -1457,12 +1457,12 @@ Env::WriteLifeTimeHint ColumnFamilyData::CalculateSSTWriteHint(int level) {
   if (initial_cf_options_.compaction_style != kCompactionStyleLevel) {
     return Env::WLTH_NOT_SET;
   }
-  if (level == 0) {
-    return Env::WLTH_MEDIUM;
+  if (level < 2) {
+    return Env::WLTH_MEDIUM;//0,1 -> 3
   }
   // int base_level = current_->storage_info()->base_level();
 
-  return static_cast<Env::WriteLifeTimeHint>(level + 3);
+  return static_cast<Env::WriteLifeTimeHint>(level + 2);
   // // L1: medium, L2: long, ...
   // if (level - base_level >= 2) {
   //   return Env::WLTH_EXTREME;

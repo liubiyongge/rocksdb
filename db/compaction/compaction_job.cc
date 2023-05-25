@@ -1277,9 +1277,10 @@ Status CompactionJob::FinishCompactionOutputFile(
         int file_index = std::lower_bound(file_scores.begin(), file_scores.end(), file_score) - file_scores.begin();
         int priority_index = std::max(file_index - cmp_index, 0);
         //Get Level Score
-        SPDLOG_INFO("filepriority {} {} {} {} {} {}", 
+        SPDLOG_INFO("filepriority {} {} {} {} {} {} {}", 
           meta->fd.GetNumber(), 
-          compact_->compaction->GetVersionStorageInfo()->CompactionLevelScore(file_output_level), 
+          compact_->compaction->GetVersionStorageInfo()->CompactionLevelScore(file_output_level),
+          compact_->compaction->GetVersionStorageInfo()->CompactionLevelScore(file_output_level+1), 
           priority_index, 
           file_score, 
           outputs.builder_->FileSize(), 
@@ -1296,6 +1297,15 @@ Status CompactionJob::FinishCompactionOutputFile(
       }else{
         SPDLOG_INFO("error {} {}", meta->fd.GetNumber(), outputs.builder_->FileSize());
       }
+    }else{
+        SPDLOG_INFO("filepriority {} {} {} {} {} {} {}", 
+        meta->fd.GetNumber(), 
+        compact_->compaction->GetVersionStorageInfo()->CompactionLevelScore(file_output_level),
+        compact_->compaction->GetVersionStorageInfo()->CompactionLevelScore(file_output_level+1), 
+        0, 
+        0, 
+        outputs.builder_->FileSize(), 
+        0);
     }
 
   }
