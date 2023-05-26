@@ -9393,9 +9393,9 @@ void YCSBFillDB(ThreadState* thread) {
 };
 
 int db_bench_tool(int argc, char** argv) {
-  auto new_logger = spdlog::basic_logger_mt("new_default_logger", "/tmp/dcompact-log.txt", true);
+  auto new_logger = spdlog::basic_logger_mt("new_default_logger", "/tmp/spdlog.txt", true);
   new_logger->set_pattern("%v");
-  spdlog::set_level(spdlog::level::off);
+  //spdlog::set_level(spdlog::level::off);
   spdlog::set_default_logger(new_logger);    
     
   ROCKSDB_NAMESPACE::port::InstallStackTraceHandler();
