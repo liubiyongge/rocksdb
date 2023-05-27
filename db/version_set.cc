@@ -2395,7 +2395,7 @@ void Version::PrepareAppend(const MutableCFOptions& mutable_cf_options,
   if (update_stats) {
     UpdateAccumulatedStats();
   }
-
+  storage_info_.cfd = cfd_;
   storage_info_.PrepareForVersionAppend(*cfd_->ioptions(), mutable_cf_options);
 }
 
@@ -3131,70 +3131,48 @@ void VersionStorageInfo::UpdateNumNonEmptyLevels() {
 
 namespace {
 // Sort `temp` based on ratio of overlapping size over file size
-void SortFileByOverlappingRatio(
-    const InternalKeyComparator& icmp, const std::vector<FileMetaData*>& files,
-    const std::vector<FileMetaData*>& next_level_files, SystemClock* clock,
-    int level, int num_non_empty_levels, uint64_t ttl,
-    std::vector<Fsize>* temp) {
+void SortFileByOverlappingRatio(const std::vector<FileMetaData*>& files, int level, std::vector<Fsize>* temp, ColumnFamilyData *cfd) {
   std::unordered_map<uint64_t, uint64_t> file_to_order;
-  auto next_level_it = next_level_files.begin();
-
-  int64_t curr_time;
-  Status status = clock->GetCurrentTime(&curr_time);
-  if (!status.ok()) {
-    // If we can't get time, disable TTL.
-    ttl = 0;
+  auto CP = cfd->compaction_pointers[level];
+  auto ucmp = cfd->user_comparator();
+  size_t num_be_cp = 0, num_af_cp = 0;
+  std::vector<FileMetaData *> files_copy;
+  for (auto &file : files) {
+    files_copy.push_back(file);
   }
-
-  FileTtlBooster ttl_booster(static_cast<uint64_t>(curr_time), ttl,
-                             num_non_empty_levels, level);
-
-  for (auto& file : files) {
-    uint64_t overlapping_bytes = 0;
-    // Skip files in next level that is smaller than current file
-    while (next_level_it != next_level_files.end() &&
-           icmp.Compare((*next_level_it)->largest, file->smallest) < 0) {
-      next_level_it++;
-    }
-
-    while (next_level_it != next_level_files.end() &&
-           icmp.Compare((*next_level_it)->smallest, file->largest) < 0) {
-      overlapping_bytes += (*next_level_it)->fd.file_size;
-
-      if (icmp.Compare((*next_level_it)->largest, file->largest) > 0) {
-        // next level file cross large boundary of current file.
-        break;
+  std::sort(files_copy.begin(), files_copy.end(), [&, ucmp](FileMetaData *a, FileMetaData *b) -> bool {
+    return ucmp->Compare(a->smallest.user_key(), b->smallest.user_key()) < 0;
+  });
+  if (!CP.empty()) {
+    for (auto& file : files_copy) {
+      if (ucmp->Compare(file->smallest.user_key(), CP) < 0) {
+        num_be_cp++;
+      } else {
+        num_af_cp++;
       }
-      next_level_it++;
     }
-
-    uint64_t ttl_boost_score = (ttl > 0) ? ttl_booster.GetBoostScore(file) : 1;
-    assert(ttl_boost_score > 0);
-    assert(file->compensated_file_size != 0);
-    file_to_order[file->fd.GetNumber()] = overlapping_bytes * 1024U /
-                                          file->compensated_file_size /
-                                          ttl_boost_score;
+    for (size_t i = 0; i < files_copy.size(); i++) {
+      auto &file = files_copy[i];
+      if (ucmp->Compare(file->smallest.user_key(), CP) < 0) {
+        file_to_order[file->fd.GetNumber()] = num_af_cp + i;
+      } else {
+        file_to_order[file->fd.GetNumber()] = i - num_be_cp;
+      }
+    }
+  } else {
+    /* If CP is not set, then just sort based on principle that the smallest key is first. */
+    for (size_t i = 0; i < files_copy.size(); i++) {
+      auto &file = files_copy[i];
+      file_to_order[file->fd.GetNumber()] = i;
+    }
   }
-
-  size_t num_to_sort = temp->size() > VersionStorageInfo::kNumberFilesToSort
-                           ? VersionStorageInfo::kNumberFilesToSort
-                           : temp->size();
-
-  std::partial_sort(temp->begin(), temp->begin() + num_to_sort, temp->end(),
-                    [&](const Fsize& f1, const Fsize& f2) -> bool {
-                      // If score is the same, pick file with smaller keys.
-                      // This makes the algorithm more deterministic, and also
-                      // help the trivial move case to have more files to
-                      // extend.
-                      if (file_to_order[f1.file->fd.GetNumber()] ==
-                          file_to_order[f2.file->fd.GetNumber()]) {
-                        return icmp.Compare(f1.file->smallest,
-                                            f2.file->smallest) < 0;
-                      }
-                      return file_to_order[f1.file->fd.GetNumber()] <
-                             file_to_order[f2.file->fd.GetNumber()];
-                    });
+  std::sort(temp->begin(), temp->end(),
+            [&](const Fsize& f1, const Fsize& f2) -> bool {
+              return file_to_order[f1.file->fd.GetNumber()] < file_to_order[f2.file->fd.GetNumber()];
+            });
 }
+
+
 
 void SortFileByRoundRobin(const InternalKeyComparator& icmp,
                           std::vector<InternalKey>* compact_cursor,
@@ -3297,9 +3275,7 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(
                   });
         break;
       case kMinOverlappingRatio:
-        SortFileByOverlappingRatio(*internal_comparator_, files_[level],
-                                   files_[level + 1], ioptions.clock, level,
-                                   num_non_empty_levels_, options.ttl, &temp);
+        SortFileByOverlappingRatio(files_[level], level, &temp, cfd);
         break;
       case kRoundRobin:
         SortFileByRoundRobin(*internal_comparator_, &compact_cursor_,

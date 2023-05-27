@@ -217,7 +217,7 @@ Status SubcompactionState::AddToOutput(
     has_penultimate_level_outputs_ = true;
   }
 
-  return Current().AddToOutput(iter, open_file_func, close_file_func);
+  return Current().AddToOutput(iter, open_file_func, close_file_func, compaction);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

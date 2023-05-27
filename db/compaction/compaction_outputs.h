@@ -208,7 +208,8 @@ class CompactionOutputs {
   // close and open new compaction output with the functions provided.
   Status AddToOutput(const CompactionIterator& c_iter,
                      const CompactionFileOpenFunc& open_file_func,
-                     const CompactionFileCloseFunc& close_file_func);
+                     const CompactionFileCloseFunc& close_file_func,
+                     Compaction* compaction);
 
   // Close the current output. `open_file_func` is needed for creating new file
   // for range-dels only output file.

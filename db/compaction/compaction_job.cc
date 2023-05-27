@@ -227,7 +227,7 @@ void CompactionJob::Prepare() {
   assert(c->column_family_data()->current()->storage_info()->NumLevelFiles(
              compact_->compaction->level()) > 0);
 
-  write_hint_ =
+  c->write_hint_ =
       c->column_family_data()->CalculateSSTWriteHint(c->output_level());
   bottommost_level_ = c->bottommost_level();
 
@@ -915,6 +915,34 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     input = trim_history_iter.get();
   }
 
+  Env::LLPolicy = false;
+  Env::has_split = false;
+  /* 既然compaction pointer不需要我们手动设置（根据下层SST的边界来的），我们只需要判断何时对sst进行split，并且何时对sst设置相对应的short、long。我们只需要在sortfiles的时候根据对应的内容来就行啦。 */
+  if (compact_->compaction->output_level() > 1 && compact_->compaction->num_input_levels() == 2) {
+    Env::LLPolicy = true;
+    std::vector<FileMetaData *> v_fmd_input_level; // = compact_->compaction->input_version()->storage_info()->LevelFiles(compact_->compaction->level(0));
+    std::vector<FileMetaData *> v_fmd_output_level; // = compact_->compaction->input_version()->storage_info()->LevelFiles(compact_->compaction->level(1));
+    for (size_t i = 0; i < compact_->compaction->input_levels(0)->num_files; i++) {
+      v_fmd_input_level.push_back(compact_->compaction->input_levels(0)->files[i].file_metadata);
+    }
+    auto ucmp = cfd->user_comparator();
+    compact_->compaction->compact_sta_key = v_fmd_input_level.at(0)->smallest.user_key();
+    compact_->compaction->compact_end_key = v_fmd_input_level.at(v_fmd_input_level.size() - 1)->largest.user_key();
+    for (auto fmd : compact_->compaction->input_version()->storage_info()->LevelFiles(compact_->compaction->level(0))) {
+      if (ucmp->Compare(fmd->smallest.user_key(), compact_->compaction->compact_end_key) > 0) {
+        compact_->compaction->compact_end_key = fmd->smallest.user_key();
+        break;
+      }
+    }
+    /* 奇怪的地方是compact_end_key < 2nd key.7 */
+    // std::cout << "STA.KEY " << compact_sta_key.ToString(true) << std::endl;
+    // std::cout << "END.KEY " << compact_end_key.ToString(true) << std::endl;
+    // input->SeekToFirst();
+    // std::cout << "1st KEY " << input->user_key().ToString(true) << std::endl;
+    // input->SeekToLast();
+    // std::cout << "2nd KEY " << input->user_key().ToString(true) << std::endl;
+  }
+
   input->SeekToFirst();
 
   AutoThreadOperationStageUpdater stage_updater(
@@ -1599,7 +1627,7 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
   }
 
   writable_file->SetIOPriority(GetRateLimiterPriority());
-  writable_file->SetWriteLifeTimeHint(write_hint_);
+  writable_file->SetWriteLifeTimeHint(sub_compact->compaction->write_hint_);
   FileTypeSet tmp_set = db_options_.checksum_handoff_file_types;
   writable_file->SetPreallocationBlockSize(static_cast<size_t>(
       sub_compact->compaction->OutputFilePreallocationSize()));

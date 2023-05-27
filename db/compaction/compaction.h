@@ -92,7 +92,10 @@ class Compaction {
   void operator=(const Compaction&) = delete;
 
   ~Compaction();
-
+  
+  Slice compact_sta_key, compact_end_key; /* User Key. */
+  bool this_sst_lifetime_is_short{false};
+  Env::WriteLifeTimeHint write_hint_ = Env::WLTH_NOT_SET;
   // Returns the level associated to the specified compaction input level.
   // If compaction_input_level is not specified, then input_level is set to 0.
   int level(size_t compaction_input_level = 0) const {

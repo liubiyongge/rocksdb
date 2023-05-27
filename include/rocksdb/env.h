@@ -161,6 +161,8 @@ class Env : public Customizable {
     uint64_t size_bytes;
   };
 
+  static bool LLPolicy;
+  static bool has_split;
   Env();
   // Construct an Env with a separate FileSystem and/or SystemClock
   // implementation
@@ -691,6 +693,8 @@ class Env : public Customizable {
   static const size_t kMaxHostNameLen = 256;
 };
 
+bool Env::LLPolicy = false;
+bool Env::has_split = false;
 // The factory function to construct a ThreadStatusUpdater.  Any Env
 // that supports GetThreadList() feature should call this function in its
 // constructor to initialize thread_status_updater_.

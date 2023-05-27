@@ -268,7 +268,8 @@ class ColumnFamilySet;
 class ColumnFamilyData {
  public:
   ~ColumnFamilyData();
-
+  Slice compaction_pointers[10]; /* 每层一个。 */
+  std::mutex mutexCP; /* 用于保护compaction_pointers的更新。 */
   // thread-safe
   uint32_t GetID() const { return id_; }
   // thread-safe

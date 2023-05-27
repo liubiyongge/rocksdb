@@ -72,16 +72,28 @@ IOStatus CompactionOutputs::WriterSyncClose(const Status& input_status,
 Status CompactionOutputs::AddToOutput(
     const CompactionIterator& c_iter,
     const CompactionFileOpenFunc& open_file_func,
-    const CompactionFileCloseFunc& close_file_func) {
+    const CompactionFileCloseFunc& close_file_func,
+    Compaction* compaction) {
   Status s;
   const Slice& key = c_iter.key();
-
+  auto cfd = compaction->column_family_data();
   if (!pending_close_ && c_iter.Valid() && partitioner_ && HasBuilder() &&
       partitioner_->ShouldPartition(
           PartitionerRequest(last_key_for_partitioner_, c_iter.user_key(),
                              current_output_file_size_)) == kRequired) {
     pending_close_ = true;
   }
+
+    bool file_ended_by_split = false;
+    if (Env::LLPolicy && !Env::has_split) {
+      Slice cur_key = c_iter.ikey().user_key;
+      auto ucmp = cfd->user_comparator();
+      if (ucmp->CompareWithoutTimestamp(cur_key, compaction->compact_end_key) >= 0) {
+        pending_close_ = true;
+        file_ended_by_split = true;
+        Env::has_split = true; /* 我们只需要Split一次就行了。 */
+      }
+    }
 
   if (pending_close_) {
     s = close_file_func(*this, c_iter.InputStatus(), key);
@@ -90,6 +102,28 @@ Status CompactionOutputs::AddToOutput(
   if (!s.ok()) {
     return s;
   }
+
+    /* 从这个key开始，KV都属于short-lived的SST。*/
+    if (file_ended_by_split) {
+        compaction->this_sst_lifetime_is_short = true;
+        /* 这样一个WLTH表示这个lifetime是LLCompaction产生的short-lived lifetime sst。*/
+        compaction->write_hint_ = static_cast<Env::WriteLifeTimeHint>(3);
+        // std::cout << "Start Creating Short-Lived SSTs." << std::endl;
+    }
+
+    if (Env::LLPolicy) {
+      if (compaction->level(0) >= 1 && compaction->num_input_levels() == 2) {
+      cfd->mutexCP.lock();
+      char *s = (char *)malloc(compaction->compact_end_key.size());
+      memcpy(s, compaction->compact_end_key.data(), compaction->compact_end_key.size());
+      if (cfd->compaction_pointers[compaction->level(0)].empty() == false) {
+        free((void *)cfd->compaction_pointers[compaction->level(0)].data());
+      }
+      cfd->compaction_pointers[compaction->level(0)] = Slice(s);
+      cfd->mutexCP.unlock();
+    }
+  }
+
 
   // Open output file if necessary
   if (!HasBuilder()) {
