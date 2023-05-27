@@ -98,6 +98,9 @@
 #include "utilities/merge_operators/sortlist.h"
 #include "utilities/persistent_cache/block_cache_tier.h"
 
+#include "plugin/zenfs/fs/zbd_zenfs.h"
+#include "plugin/zenfs/fs/fs_zenfs.h"
+
 #ifdef MEMKIND
 #include "memory/memkind_kmem_allocator.h"
 #endif
@@ -280,6 +283,8 @@ IF_ROCKSDB_LITE("",
 DEFINE_int64(num, 1000000, "Number of key/values to place in database");
 
 DEFINE_int64(loadnum, 1000000, "Number of key/values to load in database");
+
+DEFINE_int64(mixnum, 1000000, "Number of key/values to add in database");
 
 DEFINE_int64(numdistinct, 1000,
              "Number of distinct keys to use. Used in RandomWithVerify to "
@@ -3431,28 +3436,41 @@ class Benchmark {
         value_size = 100 * 1000;
         method = &Benchmark::WriteRandom;} 
       else if (name == "ycsbwklda100") {
+        fresh_db = false;
         method = &Benchmark::YCSBWorkloadA100;
       } else if (name == "ycsbwklda80") {
+        fresh_db = false;
         method = &Benchmark::YCSBWorkloadA80;
       } else if (name == "ycsbwklda50") {
+        fresh_db = false;
         method = &Benchmark::YCSBWorkloadA50;
       } else if (name == "ycsbwklda20") {
+        fresh_db = false;
         method = &Benchmark::YCSBWorkloadA20;
       } else if (name == "ycsbwklda0") {
+        fresh_db = false;
         method = &Benchmark::YCSBWorkloadA0;
       } else if (name == "ycsbwklda") {
+        fresh_db = false;
         method = &Benchmark::YCSBWorkloadA;
       } else if (name == "ycsbwkldb") {
+        fresh_db = false;
         method = &Benchmark::YCSBWorkloadB;
       } else if (name == "ycsbwkldc") {
+        fresh_db = false;
         method = &Benchmark::YCSBWorkloadC;
       } else if (name == "ycsbwkldd") {
+        fresh_db = false;
         method = &Benchmark::YCSBWorkloadD;
       } else if (name == "ycsbwklde") {
+        fresh_db = false;
+        fresh_db = false;
         method = &Benchmark::YCSBWorkloadE;
       } else if (name == "ycsbwkldf") {
+        fresh_db = false;
         method = &Benchmark::YCSBWorkloadF;
       } else if (name == "ycsbfilldb") {
+        fresh_db = false;
         method = &Benchmark::YCSBFillDB;
       } else if (name == "readseq") {
         method = &Benchmark::ReadSequential;
@@ -3882,7 +3900,8 @@ class Benchmark {
       reporter_agent.reset(new ReporterAgent(FLAGS_env, FLAGS_report_file,
                                              FLAGS_report_interval_seconds));
     }
-
+    uint64_t now = FLAGS_env->GetSystemClock()->NowMicros();
+    seed_base = static_cast<int64_t>(now);
     ThreadArg* arg = new ThreadArg[n];
 
     for (int i = 0; i < n; i++) {
@@ -3931,7 +3950,11 @@ class Benchmark {
       merge_stats.Merge(arg[i].thread->stats);
     }
     merge_stats.Report(name);
-
+    //stat Garbage Collection
+    DB* db = SelectDB(arg[0].thread);
+    ZenFS* zen_fs = dynamic_cast<ZenFS*>(db->GetFileSystem());
+    zen_fs->GetZBD()->PrintDataMovementSize();
+    
     for (int i = 0; i < n; i++) {
       delete arg[i].thread;
     }
@@ -7399,31 +7422,13 @@ void YCSBFillDB(ThreadState* thread) {
             k = nextValue() % rangenum;            
           }
           GenerateKeyFromInt(k, rangenum, &key);
-
-          int next_op = thread->rand.Next() % 100;
-          if (next_op < 100){
-            //read
-            Status s = db->Get(options, key, &value);
-            if (!s.ok() && !s.IsNotFound()) {
-              //fprintf(stderr, "k=%d; get error: %s\n", k, s.ToString().c_str());
-              //exit(1);
-              // we continue after error rather than exiting so that we can
-              // find more errors if any
-            } else if (!s.IsNotFound()) {
-              found++;
-              thread->stats.FinishedOps(nullptr, db, 1, kRead);
-            }
-            reads_done++;
-            
-          } else{
-            //write
-            if (FLAGS_benchmark_write_rate_limit > 0) {
-                
-                thread->shared->write_rate_limiter->Request(
+          //write
+          if (FLAGS_benchmark_write_rate_limit > 0) {      
+              thread->shared->write_rate_limiter->Request(
                     value_size + key_size_, Env::IO_HIGH,
                     nullptr /* stats */, RateLimiter::OpType::kWrite);
                 thread->stats.ResetLastOpTime();
-            }
+          }
             Status s = db->Put(write_options_, key, gen.Generate(value_size));
             if (!s.ok()) {
               //fprintf(stderr, "put error: %s\n", s.ToString().c_str());
@@ -7432,9 +7437,9 @@ void YCSBFillDB(ThreadState* thread) {
              writes_done++;
              thread->stats.FinishedOps(nullptr, db, 1, kWrite);
             }                
-      }
+    }
 
-    } 
+    
     char msg[100];
     snprintf(msg, sizeof(msg), "( reads:%" PRIu64 " writes:%" PRIu64 \
              " total:%" PRIu64 " found:%" PRIu64 ")",
@@ -7460,7 +7465,7 @@ void YCSBFillDB(ThreadState* thread) {
 
     int64_t reads_done = 0;
     int64_t writes_done = 0;
-    Duration duration(FLAGS_duration, FLAGS_num);
+    Duration duration(FLAGS_duration, FLAGS_mixnum);
 
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
@@ -7544,7 +7549,7 @@ void YCSBFillDB(ThreadState* thread) {
 
     int64_t reads_done = 0;
     int64_t writes_done = 0;
-    Duration duration(FLAGS_duration, FLAGS_num);
+    Duration duration(FLAGS_duration, FLAGS_mixnum);
 
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
@@ -7629,7 +7634,7 @@ void YCSBFillDB(ThreadState* thread) {
 
     int64_t reads_done = 0;
     int64_t writes_done = 0;
-    Duration duration(FLAGS_duration, FLAGS_num);
+    Duration duration(FLAGS_duration, FLAGS_mixnum);
 
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
@@ -7714,7 +7719,7 @@ void YCSBFillDB(ThreadState* thread) {
 
     int64_t reads_done = 0;
     int64_t writes_done = 0;
-    Duration duration(FLAGS_duration, FLAGS_num);
+    Duration duration(FLAGS_duration, FLAGS_mixnum);
 
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);

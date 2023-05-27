@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cinttypes>
 #include <vector>
+#include <spdlog/spdlog.h>
 
 #include "db/builder.h"
 #include "db/db_iter.h"
