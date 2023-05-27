@@ -108,6 +108,8 @@
 #include "util/string_util.h"
 #include "utilities/trace/replayer_impl.h"
 
+#include "plugin/zenfs/fs/zbd_stat.h"
+
 namespace ROCKSDB_NAMESPACE {
 
 const std::string kDefaultColumnFamilyName("default");

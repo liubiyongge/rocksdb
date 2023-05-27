@@ -166,7 +166,10 @@ class VersionStorageInfo {
 
   void PrepareForVersionAppend(const ImmutableOptions& immutable_options,
                                const MutableCFOptions& mutable_cf_options);
-
+  void VersionStorageInfo::PrepareForVersionAppend(
+    const ImmutableOptions& immutable_options,
+    const MutableCFOptions& mutable_cf_options, FileSystem* fs_);
+    
   // REQUIRES: PrepareForVersionAppend has been called
   void SetFinalized();
 
@@ -583,7 +586,9 @@ class VersionStorageInfo {
                           const MutableCFOptions& options);
   void UpdateFilesByCompactionPri(const ImmutableOptions& immutable_options,
                                   const MutableCFOptions& mutable_cf_options);
-
+  void UpdateFilesByCompactionPri(const ImmutableOptions& immutable_options,
+                                  const MutableCFOptions& mutable_cf_options,
+                                  FileSystem* fs_);
   void GenerateFileIndexer() {
     file_indexer_.UpdateIndex(&arena_, num_non_empty_levels_, files_);
   }
