@@ -3152,11 +3152,11 @@ namespace {
             if(znsfile_to_zoneunusepersent>0.9){
               Reclaimable=10;
             }else if(znsfile_to_zoneunusepersent>0.8){
-              Reclaimable=1;
+              Reclaimable=5;
             }else if(znsfile_to_zoneunusepersent>0.7){
-              Reclaimable=0.4;
+              Reclaimable=3;
             }else if(znsfile_to_zoneunusepersent>0.6){
-              Reclaimable=0.2;
+              Reclaimable=1;
             }else {
               Reclaimable=0;
             }
