@@ -3150,37 +3150,37 @@ namespace {
     float Reclaimable=0;
         if(free_percent < 10){
             if(znsfile_to_zoneunusepersent>0.9){
-              Reclaimable=10;
+              Reclaimable=3.5;
             }else if(znsfile_to_zoneunusepersent>0.8){
-              Reclaimable=5;
+              Reclaimable=2.5;
             }else if(znsfile_to_zoneunusepersent>0.7){
-              Reclaimable=3;
-            }else if(znsfile_to_zoneunusepersent>0.6){
-              Reclaimable=1;
-            }else {
-              Reclaimable=0;
-            }
-        }else if(free_percent < 20){
-            if(znsfile_to_zoneunusepersent>0.9){
-              Reclaimable=5;
-            }else if(znsfile_to_zoneunusepersent>0.8){
-              Reclaimable=2;
-            }else if(znsfile_to_zoneunusepersent>0.7){
-              Reclaimable=1;
+              Reclaimable=1.5;
             }else if(znsfile_to_zoneunusepersent>0.6){
               Reclaimable=0.5;
             }else {
               Reclaimable=0;
             }
+        }else if(free_percent < 20){
+            if(znsfile_to_zoneunusepersent>0.9){
+              Reclaimable=2.5;
+            }else if(znsfile_to_zoneunusepersent>0.8){
+              Reclaimable=1;
+            }else if(znsfile_to_zoneunusepersent>0.7){
+              Reclaimable=0.5;
+            }else if(znsfile_to_zoneunusepersent>0.6){
+              Reclaimable=0.25;
+            }else {
+              Reclaimable=0;
+            }
         }else if (free_percent < 30){
             if(znsfile_to_zoneunusepersent>0.9){
-              Reclaimable=3;
-            }else if(znsfile_to_zoneunusepersent>0.8){
               Reclaimable=1.5;
+            }else if(znsfile_to_zoneunusepersent>0.8){
+              Reclaimable=0.75;
             }else if(znsfile_to_zoneunusepersent>0.7){
-              Reclaimable=0.8;
+              Reclaimable=0.4;
             }else if(znsfile_to_zoneunusepersent>0.6){
-              Reclaimable=0.3;
+              Reclaimable=0.15;
             }else {
               Reclaimable=0;
             }
@@ -3208,7 +3208,7 @@ namespace {
 
   for (auto& file : files) {
     uint64_t overlapping_bytes = 0;
-    float Reclaimable = GetReclaimable(znsfile_to_zoneunusepersent[file->fd.GetNumber()], uint64_t free_percent);
+    float Reclaimable = GetReclaimable(znsfile_to_zoneunusepersent[file->fd.GetNumber()], free_percent);
     overlapping_bytes = file->fd.file_size - file->fd.file_size * Reclaimable;
 
     // Skip files in next level that is smaller than current file
@@ -3219,7 +3219,7 @@ namespace {
 
     while (next_level_it != next_level_files.end() &&
            icmp.Compare((*next_level_it)->smallest, file->largest) < 0) {
-      Reclaimable=GetReclaimable(znsfile_to_zoneunusepersent[(*next_level_it)->fd.GetNumber()],uint64_t free_percent);
+      Reclaimable=GetReclaimable(znsfile_to_zoneunusepersent[(*next_level_it)->fd.GetNumber()], free_percent);
       overlapping_bytes += (*next_level_it)->fd.file_size - (*next_level_it)->fd.file_size * Reclaimable;
 
       if (icmp.Compare((*next_level_it)->largest, file->largest) > 0) {
@@ -3379,8 +3379,8 @@ void SortFileByRoundRobin(const InternalKeyComparator& icmp,
 }
 }  // namespace
 
-void VersionStorageInfo::UpdateFilesByCompactionPri(const ImmutableOptions& immutable_options,
-                                  const MutableCFOptions& mutable_cf_options,
+void VersionStorageInfo::UpdateFilesByCompactionPri(
+    const ImmutableOptions& ioptions, const MutableCFOptions& options,
                                   FileSystem* fs_){
   if (compaction_style_ == kCompactionStyleNone ||
       compaction_style_ == kCompactionStyleFIFO ||
@@ -3388,9 +3388,9 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(const ImmutableOptions& immu
     // don't need this
     return;
   }
-  ZenFS* zenfs = dynamic_cast<ZenFS*>(fs_);
-  uint64_t non_free = zenfs->GetZBD()->GetUsedSpace() + zenfs->GetZBD()->GetReclaimableSpace();
-  uint64_t free = zenfs->GetZBD()->GetFreeSpace();
+  ZenFS* zen_fs = dynamic_cast<ZenFS*>(fs_);
+  uint64_t non_free = zen_fs->GetZBD()->GetUsedSpace() + zen_fs->GetZBD()->GetReclaimableSpace();
+  uint64_t free = zen_fs->GetZBD()->GetFreeSpace();
   uint64_t free_percent = (100 * free) / (free + non_free);
   BDZenFSStat stat;
   zen_fs->GetStat(stat);  
@@ -3404,7 +3404,6 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(const ImmutableOptions& immu
       }
     }
   }
-  zenfs->
   // No need to sort the highest level because it is never compacted.
   for (int level = 0; level < num_levels() - 1; level++) {
     const std::vector<FileMetaData*>& files = files_[level];
@@ -3473,7 +3472,6 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(
     // don't need this
     return;
   }
-  const std::shared_ptr<ZenFS*> zenfs = dynamic_cast<ZenFS*>(Env::Default()->GetFileSystem());
   // No need to sort the highest level because it is never compacted.
   for (int level = 0; level < num_levels() - 1; level++) {
     const std::vector<FileMetaData*>& files = files_[level];

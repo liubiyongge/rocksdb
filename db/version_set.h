@@ -56,6 +56,7 @@
 #include "trace_replay/block_cache_tracer.h"
 #include "util/coro_utils.h"
 #include "util/hash_containers.h"
+#include "plugin/zenfs/fs/zbd_stat.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -166,7 +167,7 @@ class VersionStorageInfo {
 
   void PrepareForVersionAppend(const ImmutableOptions& immutable_options,
                                const MutableCFOptions& mutable_cf_options);
-  void VersionStorageInfo::PrepareForVersionAppend(
+  void PrepareForVersionAppend(
     const ImmutableOptions& immutable_options,
     const MutableCFOptions& mutable_cf_options, FileSystem* fs_);
     
