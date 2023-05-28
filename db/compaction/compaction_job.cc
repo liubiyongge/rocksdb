@@ -1268,7 +1268,7 @@ Status CompactionJob::FinishCompactionOutputFile(
     if(overlapping_bytes != 0){
       //Get file Score
       if(outputs.builder_->FileSize() != 0){
-        uint64_t file_score = overlapping_bytes * 1024U / outputs.builder_->FileSize() + 10000;
+        uint64_t file_score = overlapping_bytes * 1024U / outputs.builder_->FileSize() + 50000;
         //Get cmp index
         const int cmp_index  = compact_->compaction->GetVersionStorageInfo()->NextCompactionIndex(file_output_level);
         const std::vector<uint64_t>& file_scores = compact_->compaction->GetVersionStorageInfo()->ScoresByCompactionPri(file_output_level);
