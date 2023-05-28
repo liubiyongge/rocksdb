@@ -9,7 +9,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "db/compaction/compaction_outputs.h"
-
+#include "rocksdb/env.h"
 #include "db/builder.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -85,13 +85,13 @@ Status CompactionOutputs::AddToOutput(
   }
 
     bool file_ended_by_split = false;
-    if (Env::LLPolicy && !Env::has_split) {
+    if (compaction->LLPolicy && !compaction->has_split) {
       Slice cur_key = c_iter.ikey().user_key;
       auto ucmp = cfd->user_comparator();
       if (ucmp->CompareWithoutTimestamp(cur_key, compaction->compact_end_key) >= 0) {
         pending_close_ = true;
         file_ended_by_split = true;
-        Env::has_split = true; /* 我们只需要Split一次就行了。 */
+        compaction->has_split = true; /* 我们只需要Split一次就行了。 */
       }
     }
 
@@ -107,19 +107,19 @@ Status CompactionOutputs::AddToOutput(
     if (file_ended_by_split) {
         compaction->this_sst_lifetime_is_short = true;
         /* 这样一个WLTH表示这个lifetime是LLCompaction产生的short-lived lifetime sst。*/
-        compaction->write_hint_ = static_cast<Env::WriteLifeTimeHint>(3);
+        compaction->write_hint_ = static_cast<Env::WriteLifeTimeHint>(100 + compaction->write_hint_);
         // std::cout << "Start Creating Short-Lived SSTs." << std::endl;
     }
 
-    if (Env::LLPolicy) {
+    if (compaction->LLPolicy) {
       if (compaction->level(0) >= 1 && compaction->num_input_levels() == 2) {
       cfd->mutexCP.lock();
-      char *s = (char *)malloc(compaction->compact_end_key.size());
-      memcpy(s, compaction->compact_end_key.data(), compaction->compact_end_key.size());
+      char *str = (char *)malloc(compaction->compact_end_key.size());
+      memcpy(str, compaction->compact_end_key.data(), compaction->compact_end_key.size());
       if (cfd->compaction_pointers[compaction->level(0)].empty() == false) {
         free((void *)cfd->compaction_pointers[compaction->level(0)].data());
       }
-      cfd->compaction_pointers[compaction->level(0)] = Slice(s);
+      cfd->compaction_pointers[compaction->level(0)] = Slice(str);
       cfd->mutexCP.unlock();
     }
   }

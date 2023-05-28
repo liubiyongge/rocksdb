@@ -50,7 +50,7 @@ namespace ROCKSDB_NAMESPACE {
 
 class SubcompactionState {
  public:
-  const Compaction* compaction;
+  Compaction* compaction;
 
   // The boundaries of the key-range this compaction is interested in. No two
   // sub-compactions may have overlapping key-ranges.

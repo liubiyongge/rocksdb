@@ -2378,7 +2378,7 @@ void VersionStorageInfo::PrepareForVersionAppend(
   ComputeCompensatedSizes();
   UpdateNumNonEmptyLevels();
   CalculateBaseBytes(immutable_options, mutable_cf_options);
-  UpdateFilesByCompactionPri(immutable_options, mutable_cf_options);
+  UpdateFilesByCompactionPri(immutable_options);
   GenerateFileIndexer();
   GenerateLevelFilesBrief();
   GenerateLevel0NonOverlapping();
@@ -3230,7 +3230,7 @@ void SortFileByRoundRobin(const InternalKeyComparator& icmp,
 }  // namespace
 
 void VersionStorageInfo::UpdateFilesByCompactionPri(
-    const ImmutableOptions& ioptions, const MutableCFOptions& options) {
+    const ImmutableOptions& ioptions) {
   if (compaction_style_ == kCompactionStyleNone ||
       compaction_style_ == kCompactionStyleFIFO ||
       compaction_style_ == kCompactionStyleUniversal) {

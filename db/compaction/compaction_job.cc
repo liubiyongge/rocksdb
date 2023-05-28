@@ -915,11 +915,11 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     input = trim_history_iter.get();
   }
 
-  Env::LLPolicy = false;
-  Env::has_split = false;
+  compact_->compaction->LLPolicy = false;
+  compact_->compaction->has_split = false;
   /* 既然compaction pointer不需要我们手动设置（根据下层SST的边界来的），我们只需要判断何时对sst进行split，并且何时对sst设置相对应的short、long。我们只需要在sortfiles的时候根据对应的内容来就行啦。 */
   if (compact_->compaction->output_level() > 1 && compact_->compaction->num_input_levels() == 2) {
-    Env::LLPolicy = true;
+    compact_->compaction->LLPolicy = true;
     std::vector<FileMetaData *> v_fmd_input_level; // = compact_->compaction->input_version()->storage_info()->LevelFiles(compact_->compaction->level(0));
     std::vector<FileMetaData *> v_fmd_output_level; // = compact_->compaction->input_version()->storage_info()->LevelFiles(compact_->compaction->level(1));
     for (size_t i = 0; i < compact_->compaction->input_levels(0)->num_files; i++) {
