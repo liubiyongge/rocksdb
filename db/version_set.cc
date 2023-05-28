@@ -2378,7 +2378,7 @@ void VersionStorageInfo::PrepareForVersionAppend(
   ComputeCompensatedSizes();
   UpdateNumNonEmptyLevels();
   CalculateBaseBytes(immutable_options, mutable_cf_options);
-  UpdateFilesByCompactionPri(immutable_options, mutable_cf_options);
+  UpdateFilesByCompactionPri(immutable_options);
   GenerateFileIndexer();
   GenerateLevelFilesBrief();
   GenerateLevel0NonOverlapping();
@@ -3134,7 +3134,6 @@ namespace {
 void SortFileByOverlappingRatio(const std::vector<FileMetaData*>& files,
     std::vector<Fsize>* temp) {
   std::unordered_map<uint64_t, uint64_t> file_to_order;
-  uint64_t overlapping_bytes = 0;
   /* 先创建的文件先进入files，因此就应该先被compact */
   for (auto& file : files) {
     file_to_order[file->fd.GetNumber()] = file->fd.GetNumber();
@@ -3204,7 +3203,7 @@ void SortFileByRoundRobin(const InternalKeyComparator& icmp,
 }  // namespace
 
 void VersionStorageInfo::UpdateFilesByCompactionPri(
-    const ImmutableOptions& ioptions, const MutableCFOptions& options) {
+    const ImmutableOptions& ioptions) {
   if (compaction_style_ == kCompactionStyleNone ||
       compaction_style_ == kCompactionStyleFIFO ||
       compaction_style_ == kCompactionStyleUniversal) {
