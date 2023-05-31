@@ -135,11 +135,11 @@ class WritableFileWriter {
   void Crc32cHandoffChecksumCalculation(const char* data, size_t size,
                                         char* buf);
 
+  size_t max_buffer_size_;
   std::string file_name_;
   FSWritableFilePtr writable_file_;
   SystemClock* clock_;
   AlignedBuffer buf_;
-  size_t max_buffer_size_;
   // Actually written data size can be used for truncate
   // not counting padding data
   std::atomic<uint64_t> filesize_;
@@ -175,11 +175,11 @@ class WritableFileWriter {
       FileChecksumGenFactory* file_checksum_gen_factory = nullptr,
       bool perform_data_verification = false,
       bool buffered_data_with_checksum = false)
-      : file_name_(_file_name),
+      : max_buffer_size_(file->GetWriteLifeTimeHint()==8?83886080:options.writable_file_max_buffer_size),
+        file_name_(_file_name),
         writable_file_(std::move(file), io_tracer, _file_name),
         clock_(clock),
         buf_(),
-        max_buffer_size_(options.writable_file_max_buffer_size),
         filesize_(0),
         flushed_size_(0),
 #ifndef ROCKSDB_LITE
