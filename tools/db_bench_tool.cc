@@ -3538,8 +3538,16 @@ class Benchmark {
       } else if (name == "readwhilescanning") {
         num_threads++;  // Add extra thread for scaning
         method = &Benchmark::ReadWhileScanning;
+      } else if (name == "readrandomwriterandom20") {
+        method = &Benchmark::ReadRandomWriteRandom20;
+      } else if (name == "readrandomwriterandom50") {
+        method = &Benchmark::ReadRandomWriteRandom50;
+      } else if (name == "readrandomwriterandom80") {
+        method = &Benchmark::ReadRandomWriteRandom80;        
+      } else if (name == "readrandomwriterandom100") {
+        method = &Benchmark::ReadRandomWriteRandom100;
       } else if (name == "readrandomwriterandom") {
-        method = &Benchmark::ReadRandomWriteRandom;
+        method = &Benchmark::ReadRandomWriteRandom;        
       } else if (name == "readrandommergerandom") {
         if (FLAGS_merge_operator.empty()) {
           fprintf(stdout, "%-12s : skipped (--merge_operator is unknown)\n",
@@ -3776,7 +3784,13 @@ class Benchmark {
 
         CombinedStats combined_stats;
         for (int i = 0; i < num_repeat; i++) {
-          Stats stats = RunBenchmark(num_threads, name, method);
+          Stats stats;
+          if(name == "ycsbwklda100"){
+             stats = RunBenchmark(1, name, method);
+          }else{
+            stats = RunBenchmark(num_threads, name, method);
+          }
+          
           combined_stats.AddStats(stats);
           if (FLAGS_confidence_interval_only) {
             combined_stats.ReportWithConfidenceIntervals(name);
@@ -3790,6 +3804,10 @@ class Benchmark {
       }
       if (post_process_method != nullptr) {
         (this->*post_process_method)();
+      }
+      if (FLAGS_statistics && name != "stats") {
+        fprintf(stdout, "STATISTICS:\n%s\n", dbstats->ToString().c_str());
+        dbstats->Reset();
       }
     }
 
@@ -3817,9 +3835,7 @@ class Benchmark {
     }
 #endif  // ROCKSDB_LITE
 
-    if (FLAGS_statistics) {
-      fprintf(stdout, "STATISTICS:\n%s\n", dbstats->ToString().c_str());
-    }
+
     if (FLAGS_simcache_size >= 0) {
       fprintf(
           stdout, "SIMULATOR CACHE STATISTICS:\n%s\n",
@@ -7203,6 +7219,298 @@ class Benchmark {
 
   // This is different from ReadWhileWriting because it does not use
   // an extra thread.
+  void ReadRandomWriteRandom20(ThreadState* thread) {
+    ReadOptions options = read_options_;
+    RandomGenerator gen;
+    std::string value;
+    int64_t found = 0;
+    int get_weight = 0;
+    int put_weight = 0;
+    int64_t reads_done = 0;
+    int64_t writes_done = 0;
+    Duration duration(FLAGS_duration, readwrites_);
+
+    std::unique_ptr<const char[]> key_guard;
+    Slice key = AllocateKey(&key_guard);
+
+    std::unique_ptr<char[]> ts_guard;
+    if (user_timestamp_size_ > 0) {
+      ts_guard.reset(new char[user_timestamp_size_]);
+    }
+
+    // the number of iterations is the larger of read_ or write_
+    while (!duration.Done(1)) {
+      DB* db = SelectDB(thread);
+      GenerateKeyFromInt(thread->rand.Next() % FLAGS_num, FLAGS_num, &key);
+      if (get_weight == 0 && put_weight == 0) {
+        // one batch completed, reinitialize for next batch
+        get_weight = 20;
+        put_weight = 100 - get_weight;
+      }
+      if (get_weight > 0) {
+        // do all the gets first
+        Slice ts;
+        if (user_timestamp_size_ > 0) {
+          ts = mock_app_clock_->GetTimestampForRead(thread->rand,
+                                                    ts_guard.get());
+          options.timestamp = &ts;
+        }
+        Status s = db->Get(options, key, &value);
+        if (!s.ok() && !s.IsNotFound()) {
+          fprintf(stderr, "get error: %s\n", s.ToString().c_str());
+          // we continue after error rather than exiting so that we can
+          // find more errors if any
+        } else if (!s.IsNotFound()) {
+          found++;
+        }
+        get_weight--;
+        reads_done++;
+        thread->stats.FinishedOps(nullptr, db, 1, kRead);
+      } else  if (put_weight > 0) {
+        // then do all the corresponding number of puts
+        // for all the gets we have done earlier
+        Status s;
+        if (user_timestamp_size_ > 0) {
+          Slice ts = mock_app_clock_->Allocate(ts_guard.get());
+          s = db->Put(write_options_, key, ts, gen.Generate());
+        } else {
+          s = db->Put(write_options_, key, gen.Generate());
+        }
+        if (!s.ok()) {
+          fprintf(stderr, "put error: %s\n", s.ToString().c_str());
+          ErrorExit();
+        }
+        put_weight--;
+        writes_done++;
+        thread->stats.FinishedOps(nullptr, db, 1, kWrite);
+      }
+    }
+    char msg[100];
+    snprintf(msg, sizeof(msg), "( reads:%" PRIu64 " writes:%" PRIu64 \
+             " total:%" PRIu64 " found:%" PRIu64 ")",
+             reads_done, writes_done, readwrites_, found);
+    thread->stats.AddMessage(msg);
+  }
+
+void ReadRandomWriteRandom50(ThreadState* thread) {
+    ReadOptions options = read_options_;
+    RandomGenerator gen;
+    std::string value;
+    int64_t found = 0;
+    int get_weight = 0;
+    int put_weight = 0;
+    int64_t reads_done = 0;
+    int64_t writes_done = 0;
+    Duration duration(FLAGS_duration, readwrites_);
+
+    std::unique_ptr<const char[]> key_guard;
+    Slice key = AllocateKey(&key_guard);
+
+    std::unique_ptr<char[]> ts_guard;
+    if (user_timestamp_size_ > 0) {
+      ts_guard.reset(new char[user_timestamp_size_]);
+    }
+
+    // the number of iterations is the larger of read_ or write_
+    while (!duration.Done(1)) {
+      DB* db = SelectDB(thread);
+      GenerateKeyFromInt(thread->rand.Next() % FLAGS_num, FLAGS_num, &key);
+      if (get_weight == 0 && put_weight == 0) {
+        // one batch completed, reinitialize for next batch
+        get_weight = 50;
+        put_weight = 100 - get_weight;
+      }
+      if (get_weight > 0) {
+        // do all the gets first
+        Slice ts;
+        if (user_timestamp_size_ > 0) {
+          ts = mock_app_clock_->GetTimestampForRead(thread->rand,
+                                                    ts_guard.get());
+          options.timestamp = &ts;
+        }
+        Status s = db->Get(options, key, &value);
+        if (!s.ok() && !s.IsNotFound()) {
+          fprintf(stderr, "get error: %s\n", s.ToString().c_str());
+          // we continue after error rather than exiting so that we can
+          // find more errors if any
+        } else if (!s.IsNotFound()) {
+          found++;
+        }
+        get_weight--;
+        reads_done++;
+        thread->stats.FinishedOps(nullptr, db, 1, kRead);
+      } else  if (put_weight > 0) {
+        // then do all the corresponding number of puts
+        // for all the gets we have done earlier
+        Status s;
+        if (user_timestamp_size_ > 0) {
+          Slice ts = mock_app_clock_->Allocate(ts_guard.get());
+          s = db->Put(write_options_, key, ts, gen.Generate());
+        } else {
+          s = db->Put(write_options_, key, gen.Generate());
+        }
+        if (!s.ok()) {
+          fprintf(stderr, "put error: %s\n", s.ToString().c_str());
+          ErrorExit();
+        }
+        put_weight--;
+        writes_done++;
+        thread->stats.FinishedOps(nullptr, db, 1, kWrite);
+      }
+    }
+    char msg[100];
+    snprintf(msg, sizeof(msg), "( reads:%" PRIu64 " writes:%" PRIu64 \
+             " total:%" PRIu64 " found:%" PRIu64 ")",
+             reads_done, writes_done, readwrites_, found);
+    thread->stats.AddMessage(msg);
+  }
+
+void ReadRandomWriteRandom80(ThreadState* thread) {
+    ReadOptions options = read_options_;
+    RandomGenerator gen;
+    std::string value;
+    int64_t found = 0;
+    int get_weight = 0;
+    int put_weight = 0;
+    int64_t reads_done = 0;
+    int64_t writes_done = 0;
+    Duration duration(FLAGS_duration, readwrites_);
+
+    std::unique_ptr<const char[]> key_guard;
+    Slice key = AllocateKey(&key_guard);
+
+    std::unique_ptr<char[]> ts_guard;
+    if (user_timestamp_size_ > 0) {
+      ts_guard.reset(new char[user_timestamp_size_]);
+    }
+
+    // the number of iterations is the larger of read_ or write_
+    while (!duration.Done(1)) {
+      DB* db = SelectDB(thread);
+      GenerateKeyFromInt(thread->rand.Next() % FLAGS_num, FLAGS_num, &key);
+      if (get_weight == 0 && put_weight == 0) {
+        // one batch completed, reinitialize for next batch
+        get_weight = 80;
+        put_weight = 100 - get_weight;
+      }
+      if (get_weight > 0) {
+        // do all the gets first
+        Slice ts;
+        if (user_timestamp_size_ > 0) {
+          ts = mock_app_clock_->GetTimestampForRead(thread->rand,
+                                                    ts_guard.get());
+          options.timestamp = &ts;
+        }
+        Status s = db->Get(options, key, &value);
+        if (!s.ok() && !s.IsNotFound()) {
+          fprintf(stderr, "get error: %s\n", s.ToString().c_str());
+          // we continue after error rather than exiting so that we can
+          // find more errors if any
+        } else if (!s.IsNotFound()) {
+          found++;
+        }
+        get_weight--;
+        reads_done++;
+        thread->stats.FinishedOps(nullptr, db, 1, kRead);
+      } else  if (put_weight > 0) {
+        // then do all the corresponding number of puts
+        // for all the gets we have done earlier
+        Status s;
+        if (user_timestamp_size_ > 0) {
+          Slice ts = mock_app_clock_->Allocate(ts_guard.get());
+          s = db->Put(write_options_, key, ts, gen.Generate());
+        } else {
+          s = db->Put(write_options_, key, gen.Generate());
+        }
+        if (!s.ok()) {
+          fprintf(stderr, "put error: %s\n", s.ToString().c_str());
+          ErrorExit();
+        }
+        put_weight--;
+        writes_done++;
+        thread->stats.FinishedOps(nullptr, db, 1, kWrite);
+      }
+    }
+    char msg[100];
+    snprintf(msg, sizeof(msg), "( reads:%" PRIu64 " writes:%" PRIu64 \
+             " total:%" PRIu64 " found:%" PRIu64 ")",
+             reads_done, writes_done, readwrites_, found);
+    thread->stats.AddMessage(msg);
+  }
+
+void ReadRandomWriteRandom100(ThreadState* thread) {
+    ReadOptions options = read_options_;
+    RandomGenerator gen;
+    std::string value;
+    int64_t found = 0;
+    int get_weight = 0;
+    int put_weight = 0;
+    int64_t reads_done = 0;
+    int64_t writes_done = 0;
+    Duration duration(FLAGS_duration, readwrites_);
+
+    std::unique_ptr<const char[]> key_guard;
+    Slice key = AllocateKey(&key_guard);
+
+    std::unique_ptr<char[]> ts_guard;
+    if (user_timestamp_size_ > 0) {
+      ts_guard.reset(new char[user_timestamp_size_]);
+    }
+
+    // the number of iterations is the larger of read_ or write_
+    while (!duration.Done(1)) {
+      DB* db = SelectDB(thread);
+      GenerateKeyFromInt(thread->rand.Next() % FLAGS_num, FLAGS_num, &key);
+      if (get_weight == 0 && put_weight == 0) {
+        // one batch completed, reinitialize for next batch
+        get_weight = 100;
+        put_weight = 100 - get_weight;
+      }
+      if (get_weight > 0) {
+        // do all the gets first
+        Slice ts;
+        if (user_timestamp_size_ > 0) {
+          ts = mock_app_clock_->GetTimestampForRead(thread->rand,
+                                                    ts_guard.get());
+          options.timestamp = &ts;
+        }
+        Status s = db->Get(options, key, &value);
+        if (!s.ok() && !s.IsNotFound()) {
+          fprintf(stderr, "get error: %s\n", s.ToString().c_str());
+          // we continue after error rather than exiting so that we can
+          // find more errors if any
+        } else if (!s.IsNotFound()) {
+          found++;
+        }
+        get_weight--;
+        reads_done++;
+        thread->stats.FinishedOps(nullptr, db, 1, kRead);
+      } else  if (put_weight > 0) {
+        // then do all the corresponding number of puts
+        // for all the gets we have done earlier
+        Status s;
+        if (user_timestamp_size_ > 0) {
+          Slice ts = mock_app_clock_->Allocate(ts_guard.get());
+          s = db->Put(write_options_, key, ts, gen.Generate());
+        } else {
+          s = db->Put(write_options_, key, gen.Generate());
+        }
+        if (!s.ok()) {
+          fprintf(stderr, "put error: %s\n", s.ToString().c_str());
+          ErrorExit();
+        }
+        put_weight--;
+        writes_done++;
+        thread->stats.FinishedOps(nullptr, db, 1, kWrite);
+      }
+    }
+    char msg[100];
+    snprintf(msg, sizeof(msg), "( reads:%" PRIu64 " writes:%" PRIu64 \
+             " total:%" PRIu64 " found:%" PRIu64 ")",
+             reads_done, writes_done, readwrites_, found);
+    thread->stats.AddMessage(msg);
+  }
+
   void ReadRandomWriteRandom(ThreadState* thread) {
     ReadOptions options = read_options_;
     RandomGenerator gen;
