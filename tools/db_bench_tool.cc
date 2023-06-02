@@ -7697,7 +7697,7 @@ void YCSBFillDB(ThreadState* thread) {
   void YCSBWorkloadA100(ThreadState* thread) {
     ReadOptions options(FLAGS_verify_checksum, true);
     RandomGenerator gen;
-    int64_t rangenum = FLAGS_loadnum * FLAGS_threads;
+    int64_t rangenum = FLAGS_loadnum;
     init_latestgen(rangenum);
     init_zipf_generator(0, rangenum);
     
