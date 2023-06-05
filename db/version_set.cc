@@ -3472,12 +3472,15 @@ void SortFileByOverlappingRatio(
     }
 
     uint64_t ttl_boost_score = (ttl > 0) ? ttl_booster.GetBoostScore(file) : 1;
+    if(ttl_boost_score){
+      
+    }
     assert(ttl_boost_score > 0);
     assert(file->compensated_file_size != 0);
-    file_to_order[file->fd.GetNumber()] = overlapping_bytes * 1024U /
-                                          file->compensated_file_size /
-                                          ttl_boost_score;
-                                          // + (50000 - (curr_time - file->TryGetFileCreationTime()))
+    file_to_order[file->fd.GetNumber()] = file->TryGetFileCreationTime();
+    // overlapping_bytes * 1024U /
+    //                                       file->compensated_file_size /
+    //                                       ttl_boost_score + (500000 - 16 * (curr_time - file->TryGetFileCreationTime()));
   }
 
   size_t num_to_sort = temp->size() > VersionStorageInfo::kNumberFilesToSort
