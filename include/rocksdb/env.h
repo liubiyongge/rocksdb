@@ -30,6 +30,8 @@
 #include "rocksdb/status.h"
 #include "rocksdb/thread_status.h"
 
+extern int lbynum_non_empty_levels;
+
 #ifdef _WIN32
 // Windows API macro interference
 #undef DeleteFile

@@ -27,6 +27,7 @@
 #include "rocksdb/utilities/options_type.h"
 #include "util/autovector.h"
 
+int lbynum_non_empty_levels = 1;
 namespace ROCKSDB_NAMESPACE {
 namespace {
 #ifndef ROCKSDB_LITE

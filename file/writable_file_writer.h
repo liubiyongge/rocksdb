@@ -21,7 +21,8 @@
 #include "rocksdb/rate_limiter.h"
 #include "test_util/sync_point.h"
 #include "util/aligned_buffer.h"
-
+#include "rocksdb/env.h"
+#include "spdlog/spdlog.h"
 namespace ROCKSDB_NAMESPACE {
 class Statistics;
 class SystemClock;
@@ -175,7 +176,7 @@ class WritableFileWriter {
       FileChecksumGenFactory* file_checksum_gen_factory = nullptr,
       bool perform_data_verification = false,
       bool buffered_data_with_checksum = false)
-      : max_buffer_size_(file->GetWriteLifeTimeHint()==8?83886080:options.writable_file_max_buffer_size),
+      : max_buffer_size_(file->GetWriteLifeTimeHint()==7&&lbynum_non_empty_levels>=7?83886080:options.writable_file_max_buffer_size),
         file_name_(_file_name),
         writable_file_(std::move(file), io_tracer, _file_name),
         clock_(clock),

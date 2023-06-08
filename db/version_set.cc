@@ -88,7 +88,6 @@
 
 std::vector<rocksdb::InternalKey> smallestLables(1000000);
 std::vector<rocksdb::InternalKey> largestLables(1000000);
-
 namespace ROCKSDB_NAMESPACE {
 
 namespace {
@@ -3425,9 +3424,13 @@ void VersionStorageInfo::UpdateNumNonEmptyLevels() {
   num_non_empty_levels_ = num_levels_;
   for (int i = num_levels_ - 1; i >= 0; i--) {
     if (files_[i].size() != 0) {
+      if(num_non_empty_levels_ > lbynum_non_empty_levels){
+        lbynum_non_empty_levels = num_non_empty_levels_;
+      }
       return;
     } else {
       num_non_empty_levels_ = i;
+      
     }
   }
 }
@@ -3451,9 +3454,10 @@ void SortFileByOverlappingRatio(
 
   FileTtlBooster ttl_booster(static_cast<uint64_t>(curr_time), ttl,
                              num_non_empty_levels, level);
-
   for (auto& file : files) {
     uint64_t overlapping_bytes = 0;
+    uint64_t overlaptimeall = 0;
+    uint64_t overlapnum = 0;
     // Skip files in next level that is smaller than current file
     while (next_level_it != next_level_files.end() &&
            icmp.Compare((*next_level_it)->largest, file->smallest) < 0) {
@@ -3463,7 +3467,8 @@ void SortFileByOverlappingRatio(
     while (next_level_it != next_level_files.end() &&
            icmp.Compare((*next_level_it)->smallest, file->largest) < 0) {
       overlapping_bytes += (*next_level_it)->fd.file_size;
-
+      overlaptimeall += (curr_time - (*next_level_it)->TryGetFileCreationTime());
+      overlapnum++;
       if (icmp.Compare((*next_level_it)->largest, file->largest) > 0) {
         // next level file cross large boundary of current file.
         break;
@@ -3477,10 +3482,13 @@ void SortFileByOverlappingRatio(
     }
     assert(ttl_boost_score > 0);
     assert(file->compensated_file_size != 0);
-    file_to_order[file->fd.GetNumber()] = file->TryGetFileCreationTime();
-    // overlapping_bytes * 1024U /
+    // uint64_t lifetime = curr_time - file->TryGetFileCreationTime();
+    // file_to_order[file->fd.GetNumber()] = overlapping_bytes * 1024U /
     //                                       file->compensated_file_size /
-    //                                       ttl_boost_score + (500000 - 16 * (curr_time - file->TryGetFileCreationTime()));
+    //                                       ttl_boost_score + (500000 - 1 * (lifetime + (overlapnum?overlaptimeall/overlapnum:0)) );
+    file_to_order[file->fd.GetNumber()] = overlapping_bytes * 1024U /
+                                          file->compensated_file_size /
+                                          ttl_boost_score + (500000 - 4 * (overlapnum?overlaptimeall/overlapnum:0));
   }
 
   size_t num_to_sort = temp->size() > VersionStorageInfo::kNumberFilesToSort
