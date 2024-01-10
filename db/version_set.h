@@ -51,6 +51,7 @@
 #include "port/port.h"
 #include "rocksdb/env.h"
 #include "rocksdb/file_checksum.h"
+#include "rocksdb/file_system.h"
 #include "table/get_context.h"
 #include "table/multiget_context.h"
 #include "trace_replay/block_cache_tracer.h"
@@ -167,6 +168,9 @@ class VersionStorageInfo {
   void PrepareForVersionAppend(const ImmutableOptions& immutable_options,
                                const MutableCFOptions& mutable_cf_options);
 
+void PrepareForVersionAppend(
+    const ImmutableOptions& immutable_options,
+    const MutableCFOptions& mutable_cf_options, FileSystem* fs_);
   // REQUIRES: PrepareForVersionAppend has been called
   void SetFinalized();
 
@@ -592,7 +596,8 @@ class VersionStorageInfo {
   void CalculateBaseBytes(const ImmutableOptions& ioptions,
                           const MutableCFOptions& options);
   void UpdateFilesByCompactionPri(const ImmutableOptions& immutable_options,
-                                  const MutableCFOptions& mutable_cf_options);
+                                  const MutableCFOptions& mutable_cf_options,
+                                  FileSystem * fs_);
 
   void GenerateFileIndexer() {
     file_indexer_.UpdateIndex(&arena_, num_non_empty_levels_, files_);

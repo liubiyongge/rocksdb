@@ -40,6 +40,7 @@
 #include "db/table_cache.h"
 #include "db/version_builder.h"
 #include "db/version_edit_handler.h"
+#include "rocksdb/file_system.h"
 #if USE_COROUTINES
 #include "folly/experimental/coro/BlockingWait.h"
 #include "folly/experimental/coro/Collect.h"
@@ -73,6 +74,9 @@
 #include "util/stop_watch.h"
 #include "util/string_util.h"
 #include "util/user_comparator_wrapper.h"
+#include "plugin/zenfs/fs/zbd_zenfs.h"
+#include "plugin/zenfs/fs/fs_zenfs.h"
+#include "plugin/zenfs/fs/zbd_stat.h"
 // Generate the regular and coroutine versions of some methods by
 // including version_set_sync_and_async.h twice
 // Macros in the header will expand differently based on whether
@@ -2676,11 +2680,11 @@ void VersionStorageInfo::GenerateLevelFilesBrief() {
 
 void VersionStorageInfo::PrepareForVersionAppend(
     const ImmutableOptions& immutable_options,
-    const MutableCFOptions& mutable_cf_options) {
+    const MutableCFOptions& mutable_cf_options, FileSystem* fs_) {
   ComputeCompensatedSizes();
   UpdateNumNonEmptyLevels();
   CalculateBaseBytes(immutable_options, mutable_cf_options);
-  UpdateFilesByCompactionPri(immutable_options, mutable_cf_options);
+  UpdateFilesByCompactionPri(immutable_options, mutable_cf_options, fs_);
   GenerateFileIndexer();
   GenerateLevelFilesBrief();
   GenerateLevel0NonOverlapping();
@@ -2698,7 +2702,7 @@ void Version::PrepareAppend(const MutableCFOptions& mutable_cf_options,
     UpdateAccumulatedStats();
   }
 
-  storage_info_.PrepareForVersionAppend(*cfd_->ioptions(), mutable_cf_options);
+  storage_info_.PrepareForVersionAppend(*cfd_->ioptions(), mutable_cf_options, vset_->fs_.get());
 }
 
 bool Version::MaybeInitializeFileMetaData(FileMetaData* file_meta) {
@@ -3436,12 +3440,21 @@ void VersionStorageInfo::UpdateNumNonEmptyLevels() {
 }
 
 namespace {
+
+ float GetReclaimable(int64_t znsfile_to_zoneunusepersent, uint64_t free_percent){
+    float Reclaimable=0;
+    if(free_percent < 30 && znsfile_to_zoneunusepersent < 11){
+      Reclaimable = 1;
+    }
+    return Reclaimable;
+  }
 // Sort `temp` based on ratio of overlapping size over file size
 void SortFileByOverlappingRatio(
     const InternalKeyComparator& icmp, const std::vector<FileMetaData*>& files,
     const std::vector<FileMetaData*>& next_level_files, SystemClock* clock,
     int level, int num_non_empty_levels, uint64_t ttl,
-    std::vector<Fsize>* temp, std::vector<uint64_t> & scores_by_compaction_pri) {
+    std::vector<Fsize>* temp, std::vector<uint64_t> & scores_by_compaction_pri,
+    std::unordered_map<uint64_t, int64_t> &znsfile_to_zoneunusepersent, uint64_t free_percent){
   std::unordered_map<uint64_t, uint64_t> file_to_order;
   auto next_level_it = next_level_files.begin();
 
@@ -3455,7 +3468,8 @@ void SortFileByOverlappingRatio(
   FileTtlBooster ttl_booster(static_cast<uint64_t>(curr_time), ttl,
                              num_non_empty_levels, level);
   for (auto& file : files) {
-    uint64_t overlapping_bytes = 0;
+    float Reclaimable = GetReclaimable(znsfile_to_zoneunusepersent[file->fd.GetNumber()], free_percent);
+    int64_t overlapping_bytes = -1 * file->fd.file_size * Reclaimable;
     uint64_t overlaptimeall = 0;
     uint64_t overlapnum = 0;
     // Skip files in next level that is smaller than current file
@@ -3466,7 +3480,8 @@ void SortFileByOverlappingRatio(
 
     while (next_level_it != next_level_files.end() &&
            icmp.Compare((*next_level_it)->smallest, file->largest) < 0) {
-      overlapping_bytes += (*next_level_it)->fd.file_size;
+      Reclaimable=GetReclaimable(znsfile_to_zoneunusepersent[(*next_level_it)->fd.GetNumber()], free_percent);
+      overlapping_bytes += (*next_level_it)->fd.file_size - (*next_level_it)->fd.file_size * Reclaimable;
       overlaptimeall += (curr_time - (*next_level_it)->TryGetFileCreationTime());
       overlapnum++;
       if (icmp.Compare((*next_level_it)->largest, file->largest) > 0) {
@@ -3570,13 +3585,35 @@ void SortFileByRoundRobin(const InternalKeyComparator& icmp,
 }  // namespace
 
 void VersionStorageInfo::UpdateFilesByCompactionPri(
-    const ImmutableOptions& ioptions, const MutableCFOptions& options) {
+    const ImmutableOptions& ioptions, const MutableCFOptions& options, FileSystem* fs_) {
   if (compaction_style_ == kCompactionStyleNone ||
       compaction_style_ == kCompactionStyleFIFO ||
       compaction_style_ == kCompactionStyleUniversal) {
     // don't need this
     return;
   }
+
+  ZenFS* zen_fs = dynamic_cast<ZenFS*>(fs_);
+  uint64_t non_free = zen_fs->GetZBD()->GetUsedSpace() + zen_fs->GetZBD()->GetReclaimableSpace();
+  uint64_t free = zen_fs->GetZBD()->GetFreeSpace();
+  uint64_t free_percent = (100 * free) / (free + non_free);
+  BDZenFSStat stat;
+  zen_fs->GetStat(stat);  
+  std::unordered_map<uint64_t, int64_t> znsfile_to_zoneunusepersent;
+  std::vector<BDZoneStat>& zone_stats = stat.zone_stats_;
+  std::sort(zone_stats.begin(), zone_stats.end(), [](BDZoneStat &l, BDZoneStat &r){
+    return l.GarbageRate() > r.GarbageRate();
+  });
+  int sort_count = 1;
+  for (auto& zone : zone_stats) {
+    for (auto& znsfile : zone.files) {
+      if(znsfile.filename.length()>4 && znsfile.filename.substr(znsfile.filename.length() - 3, 3)=="sst" ){
+        
+        znsfile_to_zoneunusepersent[atoi(znsfile.filename.substr(znsfile.filename.length() - 10, 6).c_str())]=sort_count;
+      }
+    }
+    sort_count++;
+  }    
   // No need to sort the highest level because it is never compacted.
   for (int level = 0; level < num_levels() - 1; level++) {
     const std::vector<FileMetaData*>& files = files_[level];
@@ -3619,7 +3656,8 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(
       case kMinOverlappingRatio:
         SortFileByOverlappingRatio(*internal_comparator_, files_[level],
                                    files_[level + 1], ioptions.clock, level,
-                                   num_non_empty_levels_, options.ttl, &temp, scores_by_compaction_pri);
+                                   num_non_empty_levels_, options.ttl, &temp, scores_by_compaction_pri
+                                   ,znsfile_to_zoneunusepersent, free_percent);
         break;
       case kRoundRobin:
         SortFileByRoundRobin(*internal_comparator_, &compact_cursor_,
