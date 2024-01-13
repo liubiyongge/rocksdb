@@ -8190,8 +8190,9 @@ void YCSBFillDB(ThreadState* thread) {
   void YCSBWorkloadB(ThreadState* thread) {
     ReadOptions options(FLAGS_verify_checksum, true);
     RandomGenerator gen;
-    init_latestgen(FLAGS_num);
-    init_zipf_generator(0, FLAGS_num);
+    int64_t rangenum = FLAGS_loadnum * FLAGS_threads;
+    init_latestgen(rangenum);
+    init_zipf_generator(0, rangenum);
 
     std::string value;
     int64_t found = 0;
@@ -8211,12 +8212,12 @@ void YCSBFillDB(ThreadState* thread) {
       long k;
       if (FLAGS_YCSB_uniform_distribution){
         //Generate number from uniform distribution            
-        k = thread->rand.Next() % FLAGS_num;
+        k = thread->rand.Next() % rangenum;
       } else { //default
         //Generate number from zipf distribution
-        k = nextValue() % FLAGS_num;            
+        k = nextValue() % rangenum;            
       }
-      GenerateKeyFromInt(k, FLAGS_num, &key);
+      GenerateKeyFromInt(k, rangenum, &key);
 
       int next_op = thread->rand.Next() % 100;
       if (next_op < 95){
@@ -8262,8 +8263,9 @@ void YCSBFillDB(ThreadState* thread) {
   void YCSBWorkloadC(ThreadState* thread) {
     ReadOptions options(FLAGS_verify_checksum, true);
     RandomGenerator gen;
-    init_latestgen(FLAGS_num);
-    init_zipf_generator(0, FLAGS_num);
+    int64_t rangenum = FLAGS_loadnum * FLAGS_threads;
+    init_latestgen(rangenum);
+    init_zipf_generator(0, rangenum);
 
     std::string value;
     int64_t found = 0;
@@ -8283,12 +8285,12 @@ void YCSBFillDB(ThreadState* thread) {
       long k;
       if (FLAGS_YCSB_uniform_distribution){
         //Generate number from uniform distribution            
-        k = thread->rand.Next() % FLAGS_num;
+        k = thread->rand.Next() % rangenum;
       } else { //default
         //Generate number from zipf distribution
-        k = nextValue() % FLAGS_num;            
+        k = nextValue() % rangenum;            
       }
-      GenerateKeyFromInt(k, FLAGS_num, &key);
+      GenerateKeyFromInt(k, rangenum, &key);
 
       //read
       Status s = db->Get(options, key, &value);
@@ -8329,9 +8331,9 @@ void YCSBFillDB(ThreadState* thread) {
   void YCSBWorkloadD(ThreadState* thread) {
     ReadOptions options(FLAGS_verify_checksum, true);
     RandomGenerator gen;
-    init_latestgen(FLAGS_num);
-    init_zipf_generator(0, FLAGS_num);
-
+    int64_t rangenum = FLAGS_loadnum * FLAGS_threads;
+    init_latestgen(rangenum);
+    init_zipf_generator(0, rangenum);
     std::string value;
     int64_t found = 0;
 
@@ -8351,12 +8353,12 @@ void YCSBFillDB(ThreadState* thread) {
       long k;
       if (FLAGS_YCSB_uniform_distribution){
         //Generate number from uniform distribution            
-        k = thread->rand.Next() % FLAGS_num;
+        k = thread->rand.Next() % rangenum;
       } else { //default
         //Generate number from latest distribution
-        k = next_value_latestgen() % FLAGS_num;           
+        k = next_value_latestgen() % rangenum;           
       }
-      GenerateKeyFromInt(k, FLAGS_num, &key);
+      GenerateKeyFromInt(k, rangenum, &key);
 
       int next_op = thread->rand.Next() % 100;
       if (next_op < 95){
@@ -8416,7 +8418,9 @@ void YCSBFillDB(ThreadState* thread) {
     ReadOptions options(FLAGS_verify_checksum, true);
     RandomGenerator gen;
     init_latestgen(FLAGS_num);
-    init_zipf_generator(0, FLAGS_num);
+    int64_t rangenum = FLAGS_loadnum * FLAGS_threads;
+    init_latestgen(rangenum);
+    init_zipf_generator(0, rangenum);
     
     std::string value;
     int64_t found = 0;
@@ -8436,12 +8440,12 @@ void YCSBFillDB(ThreadState* thread) {
       long k;
       if (FLAGS_YCSB_uniform_distribution){
         //Generate number from uniform distribution            
-        k = thread->rand.Next() % FLAGS_num;
+        k = thread->rand.Next() % rangenum;
       } else { //default
         //Generate number from zipf distribution
-        k = nextValue() % FLAGS_num;            
+        k = nextValue() % rangenum;            
       }
-      GenerateKeyFromInt(k, FLAGS_num, &key);
+      GenerateKeyFromInt(k, rangenum, &key);
 
 
       int next_op = thread->rand.Next() % 100;
