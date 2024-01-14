@@ -3441,10 +3441,11 @@ void VersionStorageInfo::UpdateNumNonEmptyLevels() {
 
 namespace {
 
- float GetReclaimable(int64_t znsfile_to_zoneunusepersent, uint64_t free_percent){
+ float GetReclaimable(float znsfile_to_zoneunusepersent, uint64_t free_percent, int level ){
     float Reclaimable=0;
-    if(free_percent < 30 && znsfile_to_zoneunusepersent < 11){
-      Reclaimable = 1;
+    if(level == 5) return 0;
+    if(free_percent < 30 && znsfile_to_zoneunusepersent > (1 - (30 - free_percent) * 0.01)){
+      Reclaimable = 0.25;
     }
     return Reclaimable;
   }
@@ -3454,7 +3455,7 @@ void SortFileByOverlappingRatio(
     const std::vector<FileMetaData*>& next_level_files, SystemClock* clock,
     int level, int num_non_empty_levels, uint64_t ttl,
     std::vector<Fsize>* temp, std::vector<uint64_t> & scores_by_compaction_pri,
-    std::unordered_map<uint64_t, int64_t> &znsfile_to_zoneunusepersent, uint64_t free_percent){
+    std::unordered_map<uint64_t, float> &znsfile_to_zoneunusepersent, uint64_t free_percent){
   std::unordered_map<uint64_t, uint64_t> file_to_order;
   auto next_level_it = next_level_files.begin();
 
@@ -3468,8 +3469,8 @@ void SortFileByOverlappingRatio(
   FileTtlBooster ttl_booster(static_cast<uint64_t>(curr_time), ttl,
                              num_non_empty_levels, level);
   for (auto& file : files) {
-    float Reclaimable = GetReclaimable(znsfile_to_zoneunusepersent[file->fd.GetNumber()], free_percent);
-    int64_t overlapping_bytes = -1 * file->fd.file_size * Reclaimable;
+    float Reclaimable = GetReclaimable(znsfile_to_zoneunusepersent[file->fd.GetNumber()], free_percent, level);
+    int64_t overlapping_bytes = -1 * file->fd.file_size * Reclaimable ;
     uint64_t overlaptimeall = 0;
     uint64_t overlapnum = 0;
     // Skip files in next level that is smaller than current file
@@ -3480,7 +3481,7 @@ void SortFileByOverlappingRatio(
 
     while (next_level_it != next_level_files.end() &&
            icmp.Compare((*next_level_it)->smallest, file->largest) < 0) {
-      Reclaimable=GetReclaimable(znsfile_to_zoneunusepersent[(*next_level_it)->fd.GetNumber()], free_percent);
+      Reclaimable=GetReclaimable(znsfile_to_zoneunusepersent[(*next_level_it)->fd.GetNumber()], free_percent, level + 1);
       overlapping_bytes += (*next_level_it)->fd.file_size - (*next_level_it)->fd.file_size * Reclaimable;
       overlaptimeall += (curr_time - (*next_level_it)->TryGetFileCreationTime());
       overlapnum++;
@@ -3599,20 +3600,15 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(
   uint64_t free_percent = (100 * free) / (free + non_free);
   BDZenFSStat stat;
   zen_fs->GetStat(stat);  
-  std::unordered_map<uint64_t, int64_t> znsfile_to_zoneunusepersent;
-  std::vector<BDZoneStat>& zone_stats = stat.zone_stats_;
-  std::sort(zone_stats.begin(), zone_stats.end(), [](BDZoneStat &l, BDZoneStat &r){
-    return l.GarbageRate() > r.GarbageRate();
-  });
-  int sort_count = 1;
-  for (auto& zone : zone_stats) {
+  std::unordered_map<uint64_t, float> znsfile_to_zoneunusepersent;
+  float zoneunusepersent=0;
+  for (auto& zone : stat.zone_stats_) {
     for (auto& znsfile : zone.files) {
       if(znsfile.filename.length()>4 && znsfile.filename.substr(znsfile.filename.length() - 3, 3)=="sst" ){
-        
-        znsfile_to_zoneunusepersent[atoi(znsfile.filename.substr(znsfile.filename.length() - 10, 6).c_str())]=sort_count;
+        zoneunusepersent = std::max(znsfile_to_zoneunusepersent[atoi(znsfile.filename.substr(znsfile.filename.length() - 10, 6).c_str())],(float)zone.reclaim_capacity/(zone.free_capacity+zone.used_capacity+zone.reclaim_capacity));
+        znsfile_to_zoneunusepersent[atoi(znsfile.filename.substr(znsfile.filename.length() - 10, 6).c_str())]=zoneunusepersent;
       }
     }
-    sort_count++;
   }    
   // No need to sort the highest level because it is never compacted.
   for (int level = 0; level < num_levels() - 1; level++) {
