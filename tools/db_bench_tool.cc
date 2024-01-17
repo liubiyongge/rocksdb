@@ -3785,7 +3785,7 @@ class Benchmark {
         CombinedStats combined_stats;
         for (int i = 0; i < num_repeat; i++) {
           Stats stats;
-          if(name == "ycsbwklda100"){
+          if(name == "ycsbwklda100" || name == "ycsbfilldb"){
              stats = RunBenchmark(1, name, method);
           }else{
             stats = RunBenchmark(num_threads, name, method);
@@ -8103,7 +8103,7 @@ void YCSBFillDB(ThreadState* thread) {
   void YCSBWorkloadA(ThreadState* thread) {
     ReadOptions options(FLAGS_verify_checksum, true);
     RandomGenerator gen;
-    int64_t rangenum = FLAGS_loadnum * FLAGS_threads;
+    int64_t rangenum = FLAGS_loadnum;
     init_latestgen(rangenum);
     init_zipf_generator(0, rangenum);
     
@@ -8190,7 +8190,7 @@ void YCSBFillDB(ThreadState* thread) {
   void YCSBWorkloadB(ThreadState* thread) {
     ReadOptions options(FLAGS_verify_checksum, true);
     RandomGenerator gen;
-    int64_t rangenum = FLAGS_loadnum * FLAGS_threads;
+    int64_t rangenum = FLAGS_loadnum;
     init_latestgen(rangenum);
     init_zipf_generator(0, rangenum);
 
@@ -8263,7 +8263,7 @@ void YCSBFillDB(ThreadState* thread) {
   void YCSBWorkloadC(ThreadState* thread) {
     ReadOptions options(FLAGS_verify_checksum, true);
     RandomGenerator gen;
-    int64_t rangenum = FLAGS_loadnum * FLAGS_threads;
+    int64_t rangenum = FLAGS_loadnum;
     init_latestgen(rangenum);
     init_zipf_generator(0, rangenum);
 
@@ -8331,7 +8331,7 @@ void YCSBFillDB(ThreadState* thread) {
   void YCSBWorkloadD(ThreadState* thread) {
     ReadOptions options(FLAGS_verify_checksum, true);
     RandomGenerator gen;
-    int64_t rangenum = FLAGS_loadnum * FLAGS_threads;
+    int64_t rangenum = FLAGS_loadnum;
     init_latestgen(rangenum);
     init_zipf_generator(0, rangenum);
 
@@ -8418,7 +8418,7 @@ void YCSBFillDB(ThreadState* thread) {
 
     ReadOptions options(FLAGS_verify_checksum, true);
     RandomGenerator gen;
-    int64_t rangenum = FLAGS_loadnum * FLAGS_threads;
+    int64_t rangenum = FLAGS_loadnum;
     init_latestgen(rangenum);
     init_zipf_generator(0, rangenum);
     
