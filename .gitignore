@@ -56,7 +56,7 @@ io_tracer_parser
 .DS_Store
 .vs
 .vscode
-
+.cache/
 java/out
 java/target
 java/test-libs
